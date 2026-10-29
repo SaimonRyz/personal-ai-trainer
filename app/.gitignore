@@ -1,0 +1,25 @@
+# Runtime and personal data must never enter a public repository.
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.DS_Store
+*.log
+*.sql
+*.dump
+*.backup
+*.tar
+*.tar.gz
+*.zip
+ALPHA_IMAGE.json
+RELEASE_BUILD.json
+PACKAGE_MANIFEST.local.json
+transfer-artifacts/
+wheelhouse/
+TRAINING_PLAN.md
+INVITRO_*

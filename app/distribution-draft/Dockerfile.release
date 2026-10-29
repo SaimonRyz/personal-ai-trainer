@@ -1,0 +1,25 @@
+# Candidate public build recipe; gated by verify_release_inputs.py and a clean-machine build.
+FROM ghcr.io/astral-sh/uv:0.12.5-alpine3.22@sha256:24a1eb3c84d51222710307631ef8107731326cc2b4bcab74955a766307fde06b AS uv_binary
+FROM docker.io/library/python:3.12.14-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_PYTHON_DOWNLOADS=never \
+    PATH=/app/.venv/bin:$PATH
+
+RUN groupadd --system trainer && useradd --system --gid trainer --home /app trainer
+WORKDIR /app
+COPY --from=uv_binary /usr/local/bin/uv /usr/local/bin/uv
+COPY pyproject.toml uv.lock README.md alembic.ini /app/
+COPY distribution-draft/build-constraints.txt /app/build-constraints.txt
+COPY wheelhouse/linux-arm64 /tmp/release-wheels
+COPY src /app/src
+COPY mcp /app/mcp
+COPY migrations /app/migrations
+RUN uv venv /app/.venv --python /usr/local/bin/python3.12 --no-project --offline \
+    && uv pip install --python /app/.venv/bin/python --offline --no-index --find-links /tmp/release-wheels --require-hashes --no-build -r /tmp/release-wheels/runtime-requirements.txt \
+    && uv pip install --python /app/.venv/bin/python --offline --no-index --find-links /tmp/release-wheels --require-hashes --no-build -r /app/build-constraints.txt \
+    && uv pip install --python /app/.venv/bin/python --offline --no-build-isolation --no-deps . \
+    && chown -R trainer:trainer /app
+USER trainer
+CMD ["trainer-api"]

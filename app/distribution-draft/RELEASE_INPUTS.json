@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "candidate_not_runtime_verified",
+  "target_host": "macos/arm64",
+  "target_container": "linux/arm64",
+  "python_image": {
+    "reference": "docker.io/library/python:3.12.14-slim-bookworm@sha256:392307d22300de8b5986851a12d9176dfc0fc073e65bf6523ebd7dcbeb23564e",
+    "platform_manifest_digest": "sha256:eb5be8e5b4d0a159c237946bbdd06356dda5d19c30fc4f7843e8046d3a590333",
+    "expected_image_id": "sha256:75496575cd8e3aeb3fe561f0384f661d490c14770eda935d2302d61ca20a0b2d",
+    "compressed_layer_bytes": 45094999,
+    "metadata_source": "https://hub.docker.com/layers/library/python/3.12.14-slim-bookworm/images/sha256-df69a35f027ab6a693f99ef28cae712e7988fefb59456bb407b8c63c439a79c8"
+  },
+  "uv_image": {
+    "reference": "ghcr.io/astral-sh/uv:0.12.5-alpine3.22@sha256:24a1eb3c84d51222710307631ef8107731326cc2b4bcab74955a766307fde06b",
+    "platform_manifest_digest": "sha256:87743631ebf5205ce7c7a70676cc56cbf5eaabfbc4e2e82dd483cbbc48b73d1b",
+    "expected_image_id": "sha256:2988e052e1439dfb953aeb1cb2af9e588039534609be77a68875e1e8f4a91ebb",
+    "compressed_layer_bytes": 26687035,
+    "metadata_source": "https://github.com/astral-sh/uv/pkgs/container/uv/1134415040?tag=0.12.5-alpine3.22"
+  },
+  "postgres_image": {
+    "reference": "docker.io/library/postgres:17.11-bookworm@sha256:f97ca6038b7641359fef23126949d824ac68edd8a7081b424d6a78e1f7076f8e",
+    "platform_manifest_digest": "sha256:f97ca6038b7641359fef23126949d824ac68edd8a7081b424d6a78e1f7076f8e",
+    "expected_image_id": "sha256:8942ba4a60918c2b98bcad5c842453a765898854a9fec87f64ec816bf44559be",
+    "compressed_layer_bytes": 154206341,
+    "metadata_source": "https://github.com/docker-library/repo-info/blob/master/repos/postgres/remote/17.11-bookworm.md"
+  },
+  "python_package_index": "https://pypi.org/simple",
+  "python_artifact_host": "files.pythonhosted.org",
+  "uv_lock_sha256": "2844fa329c94dbcd113276c4ec62f5882134b03694f9dc24bf80c47ddc70a6a3"
+}

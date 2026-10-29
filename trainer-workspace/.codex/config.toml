@@ -1,0 +1,45 @@
+# Copy to .codex/config.toml only in the approved standalone alpha directory.
+# This connection does not start the local API or host MCP process.
+[mcp_servers.personal-ai-trainer]
+url = "http://127.0.0.1:8768/mcp"
+enabled = true
+required = false
+default_tools_approval_mode = "writes"
+enabled_tools = [
+    "acknowledge_preview_shown",
+    "calculate_metric",
+    "confirm_preview",
+    "create_evidence_draft",
+    "create_exercise_draft",
+    "create_goal_draft",
+    "create_historical_record_draft",
+    "create_inventory_change_draft",
+    "create_measurement_session_draft",
+    "create_onboarding_draft",
+    "create_plan_draft",
+    "create_plan_lifecycle_draft",
+    "create_program_draft",
+    "create_program_publication_draft",
+    "create_record_decision_draft",
+    "create_workout_correction_draft",
+    "create_workout_report_draft",
+    "get_body_measurements",
+    "get_current_program",
+    "get_eligible_conclusions",
+    "get_exact_program",
+    "get_exercise_exact",
+    "get_operation_status",
+    "get_plan",
+    "get_planning_context",
+    "get_profile_context",
+    "get_progress",
+    "get_record_candidates",
+    "get_records",
+    "get_recommendation_explanation",
+    "get_workout_history",
+    "render_preview",
+    "revise_program_draft",
+    "revise_workout_report_draft",
+    "search_exercises",
+    "update_source_availability_draft",
+]

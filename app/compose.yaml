@@ -1,0 +1,76 @@
+name: personal-ai-trainer-alpha
+
+services:
+  postgres:
+    image: ${TRAINER_ALPHA_POSTGRES_IMAGE:?approved local PostgreSQL image ID required}
+    pull_policy: never
+    cpus: "1.50"
+    mem_limit: 768m
+    mem_reservation: 128m
+    pids_limit: 256
+    environment:
+      POSTGRES_DB: trainer
+      POSTGRES_USER: trainer_admin
+      POSTGRES_PASSWORD: ${TRAINER_POSTGRES_ADMIN_PASSWORD:?private admin password required}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trainer_admin -d trainer"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+      start_period: 5s
+    networks:
+      - trainer_internal
+    volumes:
+      - trainer_postgres_data:/var/lib/postgresql/data
+    restart: "no"
+
+  api:
+    image: ${TRAINER_ALPHA_API_IMAGE:?approved local API image ID required}
+    pull_policy: never
+    cpus: "1.00"
+    mem_limit: 384m
+    mem_reservation: 64m
+    pids_limit: 128
+    environment:
+      TRAINER_API_TOKEN: ${TRAINER_API_TOKEN:?private API token required}
+      TRAINER_OWNER_VERIFIER_TOKEN: ${TRAINER_OWNER_VERIFIER_TOKEN:-null}
+      TRAINER_API_HOST: 0.0.0.0
+      TRAINER_ALLOW_CONTAINER_BIND_ALL: "true"
+      TRAINER_API_PORT: 8765
+      TRAINER_E1RM_BENCH_EXERCISE_IDS: ${TRAINER_E1RM_BENCH_EXERCISE_IDS:-[]}
+      TRAINER_E1RM_BENCH_GRIP_CONDITIONS: ${TRAINER_E1RM_BENCH_GRIP_CONDITIONS:-[]}
+      TRAINER_DATABASE_APP_DSN: postgresql+psycopg://trainer_app:${TRAINER_DATABASE_APP_PASSWORD:?private app password required}@postgres:5432/trainer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/ready', timeout=2)",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    ports:
+      - "127.0.0.1:8767:8765"
+    networks:
+      - trainer_internal
+      - trainer_loopback
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    restart: "no"
+
+networks:
+  trainer_internal:
+    internal: true
+  trainer_loopback:
+
+volumes:
+  trainer_postgres_data:

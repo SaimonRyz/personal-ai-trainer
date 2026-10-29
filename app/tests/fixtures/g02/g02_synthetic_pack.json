@@ -1,0 +1,450 @@
+{
+  "pack_id": "G02-SYNTHETIC-01",
+  "classification": "synthetic_test_data_only",
+  "notice": "All identities and values are fictional. This is a declarative reference fixture, not a complete HTTP request, migration seed, scientific source, or execution result.",
+  "profile": {
+    "profile_id": "02000000-0000-4000-8000-000000000001",
+    "input": {
+      "timezone": "UTC",
+      "started_on": "2026-01-01",
+      "desired_sessions_per_week": 3
+    }
+  },
+  "goal": {
+    "goal_id": "02000000-0000-4000-8000-000000000002",
+    "input": {
+      "name": "Synthetic strength goal",
+      "description": "Fixture-only measurable goal",
+      "goal_type": "strength",
+      "start_value": "50",
+      "target_value": "60",
+      "unit_code": "kilogram",
+      "set_on": "2026-01-01",
+      "target_date": "2026-06-30",
+      "priority": 1,
+      "status": "active"
+    }
+  },
+  "exercise_refs": {
+    "bench": {
+      "object_id": "02000000-0000-4000-8000-000000000010",
+      "revision_id": "02000000-0000-4000-8000-000000000011",
+      "canonical_name": "Synthetic barbell bench press",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}
+      ]
+    },
+    "pullup": {
+      "object_id": "02000000-0000-4000-8000-000000000020",
+      "revision_id": "02000000-0000-4000-8000-000000000021",
+      "canonical_name": "Synthetic pull-up",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}
+      ]
+    },
+    "band_pullup": {
+      "object_id": "02000000-0000-4000-8000-000000000022",
+      "revision_id": "02000000-0000-4000-8000-000000000023",
+      "canonical_name": "Synthetic band-assisted pull-up",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}
+      ]
+    },
+    "row": {
+      "object_id": "02000000-0000-4000-8000-000000000030",
+      "revision_id": "02000000-0000-4000-8000-000000000031",
+      "canonical_name": "Synthetic cable row",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}
+      ]
+    },
+    "dumbbell_press": {
+      "object_id": "02000000-0000-4000-8000-000000000040",
+      "revision_id": "02000000-0000-4000-8000-000000000041",
+      "canonical_name": "Synthetic dumbbell press",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}
+      ]
+    },
+    "split_squat": {
+      "object_id": "02000000-0000-4000-8000-000000000050",
+      "revision_id": "02000000-0000-4000-8000-000000000051",
+      "canonical_name": "Synthetic split squat",
+      "status_code": "active",
+      "unilateral": true,
+      "measurements": [
+        {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}
+      ]
+    },
+    "plank": {
+      "object_id": "02000000-0000-4000-8000-000000000060",
+      "revision_id": "02000000-0000-4000-8000-000000000061",
+      "canonical_name": "Synthetic plank hold",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "duration", "requiredness": "required", "unit_family": "time"}
+      ]
+    },
+    "treadmill": {
+      "object_id": "02000000-0000-4000-8000-000000000070",
+      "revision_id": "02000000-0000-4000-8000-000000000071",
+      "canonical_name": "Synthetic treadmill walk",
+      "status_code": "active",
+      "unilateral": false,
+      "measurements": [
+        {"metric_kind": "duration", "requiredness": "required", "unit_family": "time"},
+        {"metric_kind": "distance", "requiredness": "optional", "unit_family": "length"}
+      ]
+    }
+  },
+  "plan": {
+    "plan_id": "02000000-0000-4000-8000-000000000100",
+    "revision_id": "02000000-0000-4000-8000-000000000101",
+    "input": {
+      "planned_date": "2026-02-10",
+      "planned_time": "17:00:00",
+      "plan_type": "training",
+      "name": "Synthetic full-cycle session",
+      "purpose": "Plan/fact fixture",
+      "temporary_conditions": {
+        "place": null,
+        "equipment_additions": [],
+        "equipment_removals": []
+      },
+      "blocks": [
+        {
+          "position": 1,
+          "block_type": "straight",
+          "name": "Barbell work",
+          "declared_rounds": null,
+          "rest_seconds": 120,
+          "exercises": [
+            {
+              "position": 1,
+              "exercise_id": "02000000-0000-4000-8000-000000000010",
+              "sets": [
+                {"position": 1, "logical_set_no": 1, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "8", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "mass": "60", "unit_code": "kilogram", "mass_meaning": "total_external_mass"}]},
+                {"position": 2, "logical_set_no": 2, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "6", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "mass": "60", "unit_code": "kilogram", "mass_meaning": "total_external_mass"}]}
+              ]
+            }
+          ]
+        },
+        {
+          "position": 2,
+          "block_type": "superset",
+          "name": "Synthetic superset",
+          "declared_rounds": 1,
+          "rest_seconds": 60,
+          "exercises": [
+            {"position": 1, "circuit_position": 1, "exercise_id": "02000000-0000-4000-8000-000000000030", "sets": [{"position": 1, "logical_set_no": 1, "round_no": 1, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "10", "unit_code": "repetition"}], "loads": []}]},
+            {"position": 2, "circuit_position": 2, "exercise_id": "02000000-0000-4000-8000-000000000040", "sets": [{"position": 1, "logical_set_no": 1, "round_no": 1, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "10", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "10", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]}]}
+          ]
+        },
+        {
+          "position": 3,
+          "block_type": "straight",
+          "name": "Pull-up to be replaced in fact",
+          "declared_rounds": null,
+          "rest_seconds": 90,
+          "exercises": [
+            {"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000020", "sets": [{"position": 1, "logical_set_no": 1, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "6", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "bodyweight"}]}]}
+          ]
+        },
+        {
+          "position": 4,
+          "block_type": "circuit",
+          "name": "Synthetic unilateral circuit",
+          "declared_rounds": 2,
+          "rest_seconds": 60,
+          "exercises": [{"position": 1, "circuit_position": 1, "exercise_id": "02000000-0000-4000-8000-000000000050", "sets": [
+            {"position": 1, "logical_set_no": 1, "round_no": 1, "side": "left", "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "8", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "8", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]},
+            {"position": 2, "logical_set_no": 1, "round_no": 1, "side": "right", "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "8", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "8", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]},
+            {"position": 3, "logical_set_no": 2, "round_no": 2, "side": "left", "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "8", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "10", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]},
+            {"position": 4, "logical_set_no": 2, "round_no": 2, "side": "right", "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "8", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "10", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]}
+          ]}]
+        },
+        {"position": 5, "block_type": "straight", "name": "Hold", "declared_rounds": null, "rest_seconds": 45, "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000060", "sets": [{"position": 1, "logical_set_no": 1, "set_type": "working", "metrics": [{"metric_kind": "duration", "exact_value": "30", "unit_code": "second"}], "loads": [{"position": 1, "load_kind": "bodyweight"}]}]}]},
+        {"position": 6, "block_type": "straight", "name": "Cardio", "declared_rounds": null, "rest_seconds": 0, "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000070", "sets": [{"position": 1, "logical_set_no": 1, "set_type": "working", "metrics": [{"metric_kind": "duration", "exact_value": "600", "unit_code": "second"}, {"metric_kind": "distance", "exact_value": "2000", "unit_code": "meter"}], "loads": []}]}]},
+        {"position": 7, "block_type": "straight", "name": "Bodyweight pull-up comparison", "declared_rounds": null, "rest_seconds": 90, "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000020", "sets": [
+          {"position": 1, "logical_set_no": 1, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "6", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "bodyweight"}]},
+          {"position": 2, "logical_set_no": 2, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "6", "unit_code": "repetition"}], "loads": [{"position": 1, "load_kind": "bodyweight"}, {"position": 2, "load_kind": "band", "item_count": "1", "direction": "assistance"}]}
+        ]}]},
+        {"position": 8, "block_type": "straight", "name": "Independent omission", "declared_rounds": null, "rest_seconds": 0, "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000030", "sets": [{"position": 1, "logical_set_no": 1, "set_type": "working", "metrics": [{"metric_kind": "repetitions", "exact_value": "8", "unit_code": "repetition"}], "loads": []}]}]}
+      ]
+    }
+  },
+  "workout_report": {
+    "session_id": "02000000-0000-4000-8000-000000000200",
+    "revision_id": "02000000-0000-4000-8000-000000000201",
+    "input": {
+      "plan_id": "02000000-0000-4000-8000-000000000100",
+      "plan_revision_id": "02000000-0000-4000-8000-000000000101",
+      "started_at": "2026-02-10T17:05:00Z",
+      "ended_at": "2026-02-10T18:05:00Z",
+      "local_start_date": "2026-02-10",
+      "duration_seconds": 3600,
+      "session_type": "training",
+      "name": "Synthetic completed report",
+      "lifecycle": "completed",
+      "workout_metrics": [],
+      "blocks": [
+        {"position": 1, "planned_block_id": "02000000-0000-4000-8000-000000000110", "block_type_code": "straight", "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000010", "planned_exercise_id": "02000000-0000-4000-8000-000000000111", "result": "performed", "sets": [
+          {"position": 1, "planned_set_id": "02000000-0000-4000-8000-000000000112", "logical_set_no": 1, "set_type_code": "working", "full_reps": 8, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "8", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "mass": "60", "unit_code": "kilogram", "mass_meaning": "total_external_mass"}]},
+          {"position": 2, "planned_set_id": "02000000-0000-4000-8000-000000000113", "logical_set_no": 2, "set_type_code": "working", "full_reps": 6, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "6", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "mass": "65", "unit_code": "kilogram", "mass_meaning": "total_external_mass"}]}
+        ]}]},
+        {"position": 2, "planned_block_id": "02000000-0000-4000-8000-000000000120", "block_type_code": "superset", "declared_rounds": 1, "exercises": [
+          {"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000030", "planned_exercise_id": "02000000-0000-4000-8000-000000000121", "result": "performed", "sets": [{"position": 1, "planned_set_id": "02000000-0000-4000-8000-000000000122", "logical_set_no": 1, "round_no": 1, "set_type_code": "working", "full_reps": 10, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "10", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "mass": "25", "unit_code": "kilogram", "mass_meaning": "total_external_mass"}]}]},
+          {"position": 2, "exercise_id": "02000000-0000-4000-8000-000000000040", "planned_exercise_id": "02000000-0000-4000-8000-000000000123", "result": "performed", "sets": [{"position": 1, "planned_set_id": "02000000-0000-4000-8000-000000000124", "logical_set_no": 1, "round_no": 1, "set_type_code": "working", "full_reps": 10, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "10", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "10", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}] }]}
+        ]},
+        {"position": 3, "planned_block_id": "02000000-0000-4000-8000-000000000130", "block_type_code": "straight", "exercises": [
+          {"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000020", "planned_exercise_id": "02000000-0000-4000-8000-000000000131", "result": "skipped", "reason": "replacement", "sets": []},
+          {"position": 2, "exercise_id": "02000000-0000-4000-8000-000000000022", "planned_exercise_id": null, "result": "added", "replacement_source": {"kind": "skipped_execution", "block_position": 3, "exercise_position": 1}, "reason": "Synthetic band-assisted substitute", "sets": [{"position": 1, "logical_set_no": 1, "set_type_code": "working", "full_reps": 5, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "5", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "bodyweight"}, {"position": 2, "load_kind": "band", "item_count": "1", "direction": "assistance"}]}]}
+        ]},
+        {"position": 4, "planned_block_id": "02000000-0000-4000-8000-000000000140", "block_type_code": "circuit", "declared_rounds": 2, "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000050", "planned_exercise_id": "02000000-0000-4000-8000-000000000141", "result": "performed", "sets": [
+          {"position": 1, "planned_set_id": "02000000-0000-4000-8000-000000000142", "logical_set_no": 1, "round_no": 1, "side": "left", "set_type_code": "working", "full_reps": 8, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "8", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "8", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]},
+          {"position": 2, "planned_set_id": "02000000-0000-4000-8000-000000000143", "logical_set_no": 1, "round_no": 1, "side": "right", "set_type_code": "working", "full_reps": 8, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "8", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "8", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]},
+          {"position": 3, "planned_set_id": "02000000-0000-4000-8000-000000000144", "logical_set_no": 2, "round_no": 2, "side": "left", "set_type_code": "working", "full_reps": 8, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "8", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "10", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]},
+          {"position": 4, "planned_set_id": "02000000-0000-4000-8000-000000000145", "logical_set_no": 2, "round_no": 2, "side": "right", "set_type_code": "working", "full_reps": 8, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "8", "unit_code": "repetition", "source_kind": "user"}], "loads": [{"position": 1, "load_kind": "external", "item_count": "2", "mass": "10", "unit_code": "kilogram", "mass_meaning": "per_item_mass"}]}
+        ]}]},
+        {
+          "position": 5,
+          "planned_block_id": "02000000-0000-4000-8000-000000000150",
+          "block_type_code": "straight",
+          "exercises": [
+            {
+              "position": 1,
+              "exercise_id": "02000000-0000-4000-8000-000000000060",
+              "planned_exercise_id": "02000000-0000-4000-8000-000000000151",
+              "result": "performed",
+              "sets": [
+                {
+                  "position": 1,
+                  "planned_set_id": "02000000-0000-4000-8000-000000000152",
+                  "logical_set_no": 1,
+                  "set_type_code": "working",
+                  "status": "performed",
+                  "metrics": [{"metric_kind": "duration", "value": "30", "unit_code": "second", "source_kind": "user"}],
+                  "loads": [{"position": 1, "load_kind": "bodyweight"}]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "position": 6,
+          "planned_block_id": "02000000-0000-4000-8000-000000000160",
+          "block_type_code": "straight",
+          "exercises": [
+            {
+              "position": 1,
+              "exercise_id": "02000000-0000-4000-8000-000000000070",
+              "planned_exercise_id": "02000000-0000-4000-8000-000000000161",
+              "result": "performed",
+              "sets": [
+                {
+                  "position": 1,
+                  "planned_set_id": "02000000-0000-4000-8000-000000000162",
+                  "logical_set_no": 1,
+                  "set_type_code": "working",
+                  "status": "performed",
+                  "metrics": [
+                    {"metric_kind": "duration", "value": "600", "unit_code": "second", "source_kind": "user"},
+                    {"metric_kind": "distance", "value": "2000", "unit_code": "meter", "source_kind": "user"}
+                  ],
+                  "loads": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "position": 7,
+          "planned_block_id": "02000000-0000-4000-8000-000000000170",
+          "block_type_code": "straight",
+          "exercises": [
+            {
+              "position": 1,
+              "exercise_id": "02000000-0000-4000-8000-000000000020",
+              "planned_exercise_id": "02000000-0000-4000-8000-000000000171",
+              "result": "performed",
+              "sets": [
+                {
+                  "position": 1,
+                  "planned_set_id": "02000000-0000-4000-8000-000000000172",
+                  "logical_set_no": 1,
+                  "set_type_code": "working",
+                  "full_reps": 6,
+                  "status": "performed",
+                  "metrics": [{"metric_kind": "repetitions", "value": "6", "unit_code": "repetition", "source_kind": "user"}],
+                  "loads": [{"position": 1, "load_kind": "bodyweight"}]
+                },
+                {
+                  "position": 2,
+                  "planned_set_id": "02000000-0000-4000-8000-000000000173",
+                  "logical_set_no": 2,
+                  "set_type_code": "working",
+                  "full_reps": 6,
+                  "status": "performed",
+                  "metrics": [{"metric_kind": "repetitions", "value": "6", "unit_code": "repetition", "source_kind": "user"}],
+                  "loads": [{"position": 1, "load_kind": "bodyweight"}, {"position": 2, "load_kind": "band", "item_count": "1", "direction": "assistance"}]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "position": 8,
+          "planned_block_id": "02000000-0000-4000-8000-000000000180",
+          "block_type_code": "straight",
+          "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000030", "planned_exercise_id": "02000000-0000-4000-8000-000000000181", "result": "skipped", "reason": "independent omission", "sets": []}]
+        },
+        {
+          "position": 9,
+          "planned_block_id": null,
+          "block_type_code": "straight",
+          "exercises": [{"position": 1, "exercise_id": "02000000-0000-4000-8000-000000000030", "planned_exercise_id": null, "result": "added", "reason": "independent addition", "sets": [{"position": 1, "logical_set_no": 1, "set_type_code": "working", "full_reps": 8, "status": "performed", "metrics": [{"metric_kind": "repetitions", "value": "8", "unit_code": "repetition", "source_kind": "user"}], "loads": []}]}]
+        }
+      ],
+      "confirmed_unknown_planned_exercise_ids": [],
+      "confirmed_unknown_planned_set_ids": [],
+      "confirmed_unknown_planned_load_component_ids": [],
+      "confirmed_unknown_metrics": []
+    }
+  },
+  "saved_state_expectations": {
+    "test_only_identity_map": {
+      "planned_ids": [
+        {"planned_block_id": "02000000-0000-4000-8000-000000000110", "plan_pointer": "/plan/input/blocks/0"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000111", "plan_pointer": "/plan/input/blocks/0/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000112", "plan_pointer": "/plan/input/blocks/0/exercises/0/sets/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000113", "plan_pointer": "/plan/input/blocks/0/exercises/0/sets/1"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000120", "plan_pointer": "/plan/input/blocks/1"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000121", "plan_pointer": "/plan/input/blocks/1/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000122", "plan_pointer": "/plan/input/blocks/1/exercises/0/sets/0"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000123", "plan_pointer": "/plan/input/blocks/1/exercises/1"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000124", "plan_pointer": "/plan/input/blocks/1/exercises/1/sets/0"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000130", "plan_pointer": "/plan/input/blocks/2"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000131", "plan_pointer": "/plan/input/blocks/2/exercises/0"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000140", "plan_pointer": "/plan/input/blocks/3"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000141", "plan_pointer": "/plan/input/blocks/3/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000142", "plan_pointer": "/plan/input/blocks/3/exercises/0/sets/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000143", "plan_pointer": "/plan/input/blocks/3/exercises/0/sets/1"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000144", "plan_pointer": "/plan/input/blocks/3/exercises/0/sets/2"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000145", "plan_pointer": "/plan/input/blocks/3/exercises/0/sets/3"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000150", "plan_pointer": "/plan/input/blocks/4"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000151", "plan_pointer": "/plan/input/blocks/4/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000152", "plan_pointer": "/plan/input/blocks/4/exercises/0/sets/0"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000160", "plan_pointer": "/plan/input/blocks/5"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000161", "plan_pointer": "/plan/input/blocks/5/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000162", "plan_pointer": "/plan/input/blocks/5/exercises/0/sets/0"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000170", "plan_pointer": "/plan/input/blocks/6"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000171", "plan_pointer": "/plan/input/blocks/6/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000172", "plan_pointer": "/plan/input/blocks/6/exercises/0/sets/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000173", "plan_pointer": "/plan/input/blocks/6/exercises/0/sets/1"},
+        {"planned_block_id": "02000000-0000-4000-8000-000000000180", "plan_pointer": "/plan/input/blocks/7"},
+        {"planned_exercise_id": "02000000-0000-4000-8000-000000000181", "plan_pointer": "/plan/input/blocks/7/exercises/0"},
+        {"planned_set_id": "02000000-0000-4000-8000-000000000182", "plan_pointer": "/plan/input/blocks/7/exercises/0/sets/0"}
+      ],
+      "synthetic_actual_record_history": {
+        "comparison_condition": {"condition_id": "02000000-0000-4000-8000-000000000320", "exercise_id": "02000000-0000-4000-8000-000000000010", "exercise_revision_id": "02000000-0000-4000-8000-000000000011", "rule_version": "record_v1", "scope": "comparable", "metric_kind": "record_external_load", "unit_code": "kilogram", "side": "not_applicable", "loads": [{"load_kind": "external", "equipment_id": "02000000-0000-4000-8000-000000000340", "equipment_type": "barbell", "item_count": "1", "mass_meaning": "total_external_mass"}], "fixed_reps": 8, "fixed_distance_m": null, "unknown_fields": [], "context_ref": "same_synthetic_context_g02_progress", "normalized_key_components": {"metric_kind": "record_external_load", "unit_code": "kilogram", "side": "not_applicable", "load_signature": [{"load_kind": "external", "equipment_type": "barbell", "item_count": "1", "mass_meaning": "total_external_mass"}], "fixed_reps": 8, "fixed_distance_m": null, "rule_version": "record_v1"}, "note": "One shared test-only condition for all three points; mass is intentionally absent from load_signature and varies only as ActualRecord.value."},
+        "accepted_candidates": [
+          {"candidate_status": "accepted", "actual_record": {"record_id": "02000000-0000-4000-8000-000000000322", "profile_id": "02000000-0000-4000-8000-000000000001", "candidate_id": "02000000-0000-4000-8000-000000000321", "metric_kind": "record_external_load", "value": "60", "unit_code": "kilogram", "achieved_on": "2026-01-10", "condition_id": "02000000-0000-4000-8000-000000000320", "exercise_id": "02000000-0000-4000-8000-000000000010", "exercise_revision_id": "02000000-0000-4000-8000-000000000011", "session_id": "02000000-0000-4000-8000-000000000301", "session_revision_id": "02000000-0000-4000-8000-000000000302", "actual_set_id": "02000000-0000-4000-8000-000000000303", "confirmation_id": "02000000-0000-4000-8000-000000000324", "is_historical_import": false, "is_current": false, "supersedes_record_id": null}, "domain_change_id": "02000000-0000-4000-8000-000000000325", "progress_point_pointer": "/progress_case/points/0"},
+          {"candidate_status": "accepted", "actual_record": {"record_id": "02000000-0000-4000-8000-000000000327", "profile_id": "02000000-0000-4000-8000-000000000001", "candidate_id": "02000000-0000-4000-8000-000000000326", "metric_kind": "record_external_load", "value": "62.5", "unit_code": "kilogram", "achieved_on": "2026-01-24", "condition_id": "02000000-0000-4000-8000-000000000320", "exercise_id": "02000000-0000-4000-8000-000000000010", "exercise_revision_id": "02000000-0000-4000-8000-000000000011", "session_id": "02000000-0000-4000-8000-000000000304", "session_revision_id": "02000000-0000-4000-8000-000000000305", "actual_set_id": "02000000-0000-4000-8000-000000000306", "confirmation_id": "02000000-0000-4000-8000-000000000329", "is_historical_import": false, "is_current": false, "supersedes_record_id": "02000000-0000-4000-8000-000000000322"}, "domain_change_id": "02000000-0000-4000-8000-000000000330", "progress_point_pointer": "/progress_case/points/1"},
+          {"candidate_status": "accepted", "actual_record": {"record_id": "02000000-0000-4000-8000-000000000332", "profile_id": "02000000-0000-4000-8000-000000000001", "candidate_id": "02000000-0000-4000-8000-000000000331", "metric_kind": "record_external_load", "value": "65", "unit_code": "kilogram", "achieved_on": "2026-02-10", "condition_id": "02000000-0000-4000-8000-000000000320", "exercise_id": "02000000-0000-4000-8000-000000000010", "exercise_revision_id": "02000000-0000-4000-8000-000000000011", "session_id": "02000000-0000-4000-8000-000000000307", "session_revision_id": "02000000-0000-4000-8000-000000000308", "actual_set_id": "02000000-0000-4000-8000-000000000309", "confirmation_id": "02000000-0000-4000-8000-000000000334", "is_historical_import": false, "is_current": true, "supersedes_record_id": "02000000-0000-4000-8000-000000000327"}, "domain_change_id": "02000000-0000-4000-8000-000000000335", "progress_point_pointer": "/progress_case/points/2"}
+        ],
+      "confirmation_history": [
+        {"confirmation_id": "02000000-0000-4000-8000-000000000324", "status": "confirmed", "record_id": "02000000-0000-4000-8000-000000000322", "domain_change_id": "02000000-0000-4000-8000-000000000325"},
+        {"confirmation_id": "02000000-0000-4000-8000-000000000329", "status": "confirmed", "record_id": "02000000-0000-4000-8000-000000000327", "domain_change_id": "02000000-0000-4000-8000-000000000330"},
+        {"confirmation_id": "02000000-0000-4000-8000-000000000334", "status": "confirmed", "record_id": "02000000-0000-4000-8000-000000000332", "domain_change_id": "02000000-0000-4000-8000-000000000335"}
+      ],
+      "history_relation": "Each accepted candidate materializes one immutable ActualRecord row; confirmation_history links that record to its confirmed confirmation and DomainChange. QRY-06 progress points come only from these accepted, confirmed history-linked records."
+      },
+      "correction_source_materialization": {"session_id": "02000000-0000-4000-8000-000000000200", "source_report_pointer": "/workout_report/input", "source_set_pointer": "/workout_report/input/blocks/6/exercises/0/sets/0", "before_revision_id": "02000000-0000-4000-8000-000000000201", "before_actual_set_id": "02000000-0000-4000-8000-000000000203", "before_full_reps": 6, "after_revision_id": "02000000-0000-4000-8000-000000000202", "after_actual_set_id": "02000000-0000-4000-8000-000000000213", "after_full_reps": 7, "rule": "Materialize revision 201 from the complete workout_report.input; for revision 202 clone that entire input tree and change only this pull-up set full_reps and repetitions metric value from 6 to 7. Materialize the full replacement report as a new immutable revision with new actual child IDs, including set 213 at the same source pointer; do not reuse revision 201 child identities."},
+      "materialization_rule": "These are deterministic test-only identities, not request fields. Build plan tree IDs by the listed JSON Pointers in array order; the independent skipped node is part of plan.input; create progress confirmed ActualRecords from the expected history graph, linked source sets, and shared ComparisonCondition before querying progress."
+    },
+    "barbell_assembly_snapshots": [
+      {"source_pointer": "/workout_report/input/blocks/0/exercises/0/sets/0/loads/0", "assembly_snapshot": {"bar_mass_kg": "20", "plate_mass_each_side_kg": "20"}, "canonical_mass": "60", "canonical_mass_meaning": "total_external_mass", "do_not_add_snapshot_to_canonical_mass": true},
+      {"source_pointer": "/workout_report/input/blocks/0/exercises/0/sets/1/loads/0", "assembly_snapshot": {"bar_mass_kg": "20", "plate_mass_each_side_kg": "22.5"}, "canonical_mass": "65", "canonical_mass_meaning": "total_external_mass", "do_not_add_snapshot_to_canonical_mass": true}
+    ]
+  },
+  "correction_case": {
+    "target": {"object_type": "workout_session", "object_id": "02000000-0000-4000-8000-000000000200", "revision_id": "02000000-0000-4000-8000-000000000201"},
+    "reason": "Synthetic correction of an explicitly reported repetition count",
+    "before": {"session_revision_id": "02000000-0000-4000-8000-000000000201", "actual_set_id": "02000000-0000-4000-8000-000000000203", "full_reps": 6},
+    "after": {"session_revision_id": "02000000-0000-4000-8000-000000000202", "actual_set_id": "02000000-0000-4000-8000-000000000213", "full_reps": 7},
+    "expected_invariant": "A complete replacement report creates a new immutable session revision; it does not mutate the plan or reuse child identities."
+  },
+  "progress_case": {
+    "metric_kind": "record_external_load",
+    "comparison_status_expected_for_three_comparable_dates": "descriptive_direction",
+    "test_only_comparability": {
+      "exercise_ref": {"object_id": "02000000-0000-4000-8000-000000000010", "revision_id": "02000000-0000-4000-8000-000000000011"},
+      "condition_id": "02000000-0000-4000-8000-000000000320",
+      "set_type_code": "working",
+      "full_reps": 8,
+      "load_mode": "external",
+      "mass_meaning": "total_external_mass",
+      "direction": null,
+      "side": "not_applicable",
+      "equipment_ref": {"equipment_id": "02000000-0000-4000-8000-000000000340", "equipment_type": "barbell"},
+      "item_count": "1",
+      "context_ref": "same_synthetic_context_g02_progress",
+      "note": "Fixture metadata only; not API request fields. One shared condition applies to all points; external mass varies only as ActualRecord metric value."
+    },
+    "points": [
+      {"date": "2026-01-10", "value": "60", "unit_code": "kilogram", "candidate_id": "02000000-0000-4000-8000-000000000321", "record_id": "02000000-0000-4000-8000-000000000322", "condition_id": "02000000-0000-4000-8000-000000000320", "session_id": "02000000-0000-4000-8000-000000000301", "session_revision_id": "02000000-0000-4000-8000-000000000302", "actual_set_id": "02000000-0000-4000-8000-000000000303", "confirmation_id": "02000000-0000-4000-8000-000000000324", "domain_change_id": "02000000-0000-4000-8000-000000000325", "exercise_ref": {"object_id": "02000000-0000-4000-8000-000000000010", "revision_id": "02000000-0000-4000-8000-000000000011"}, "condition_ref": "02000000-0000-4000-8000-000000000320", "set_type_code": "working", "full_reps": 8, "load_mode": "external", "mass_meaning": "total_external_mass", "direction": null, "context_ref": "same_synthetic_context_g02_progress"},
+      {"date": "2026-01-24", "value": "62.5", "unit_code": "kilogram", "candidate_id": "02000000-0000-4000-8000-000000000326", "record_id": "02000000-0000-4000-8000-000000000327", "condition_id": "02000000-0000-4000-8000-000000000320", "session_id": "02000000-0000-4000-8000-000000000304", "session_revision_id": "02000000-0000-4000-8000-000000000305", "actual_set_id": "02000000-0000-4000-8000-000000000306", "confirmation_id": "02000000-0000-4000-8000-000000000329", "domain_change_id": "02000000-0000-4000-8000-000000000330", "exercise_ref": {"object_id": "02000000-0000-4000-8000-000000000010", "revision_id": "02000000-0000-4000-8000-000000000011"}, "condition_ref": "02000000-0000-4000-8000-000000000320", "set_type_code": "working", "full_reps": 8, "load_mode": "external", "mass_meaning": "total_external_mass", "direction": null, "context_ref": "same_synthetic_context_g02_progress"},
+      {"date": "2026-02-10", "value": "65", "unit_code": "kilogram", "candidate_id": "02000000-0000-4000-8000-000000000331", "record_id": "02000000-0000-4000-8000-000000000332", "condition_id": "02000000-0000-4000-8000-000000000320", "session_id": "02000000-0000-4000-8000-000000000307", "session_revision_id": "02000000-0000-4000-8000-000000000308", "actual_set_id": "02000000-0000-4000-8000-000000000309", "confirmation_id": "02000000-0000-4000-8000-000000000334", "domain_change_id": "02000000-0000-4000-8000-000000000335", "exercise_ref": {"object_id": "02000000-0000-4000-8000-000000000010", "revision_id": "02000000-0000-4000-8000-000000000011"}, "condition_ref": "02000000-0000-4000-8000-000000000320", "set_type_code": "working", "full_reps": 8, "load_mode": "external", "mass_meaning": "total_external_mass", "direction": null, "context_ref": "same_synthetic_context_g02_progress"}
+    ],
+    "expected_invariant": "Three comparable dated points may be described; do not label them a statistical trend or prediction."
+  },
+  "evidence_case": {
+    "source": {
+      "citation_key": "g02-synthetic-placeholder-001",
+      "title": "Synthetic test-only placeholder, not a publication",
+      "authors_or_org": "Synthetic fixture",
+      "publication_year": 2026,
+      "source_type": "synthetic_placeholder",
+      "url": "https://example.invalid/g02/synthetic-placeholder-001",
+      "metadata_snapshot": {"synthetic_only": true, "not_a_real_source": true},
+      "availability": "unavailable"
+    },
+    "conclusion": {
+      "topic": "synthetic-only",
+      "statement": "Placeholder statement; not evidence and not a training recommendation.",
+      "population_conditions": "None; fixture metadata only.",
+      "confidence": "insufficient",
+      "review_due_on": "2026-12-31",
+      "applicability": [],
+      "caveats": [{"kind": "synthetic_only", "note": "Never mark verified or use as a scientific basis."}]
+    },
+    "expected_invariant": "Draft/insufficient synthetic material is not eligible as verified support for a plan. No owner verification is simulated."
+  },
+  "case_matrix": [
+    {"case_id": "G02-01", "covers": ["context_goals"], "refs": ["/profile", "/goal"]},
+    {"case_id": "G02-02", "covers": ["plan_fact"], "refs": ["/plan", "/workout_report", "/saved_state_expectations/test_only_identity_map/planned_ids"]},
+    {"case_id": "G02-03", "covers": ["strength_different_weights_by_sets_and_rounds"], "refs": ["/plan/input/blocks/0", "/workout_report/input/blocks/0", "/plan/input/blocks/3", "/workout_report/input/blocks/3"]},
+    {"case_id": "G02-04", "covers": ["full_barbell_weight_and_component_snapshot", "separate_item_mass"], "refs": ["/workout_report/input/blocks/0", "/saved_state_expectations/barbell_assembly_snapshots/0", "/saved_state_expectations/barbell_assembly_snapshots/1", "/workout_report/input/blocks/1"]},
+    {"case_id": "G02-05", "covers": ["bodyweight_with_and_without_band"], "refs": ["/workout_report/input/blocks/6/exercises/0/sets/0", "/workout_report/input/blocks/6/exercises/0/sets/1"]},
+    {"case_id": "G02-06", "covers": ["unilateral_sides_separate"], "refs": ["/workout_report/input/blocks/3"]},
+    {"case_id": "G02-07", "covers": ["multiple_load_components"], "refs": ["/workout_report/input/blocks/2/exercises/1/sets/0"]},
+    {"case_id": "G02-08", "covers": ["hold"], "refs": ["/workout_report/input/blocks/4"]},
+    {"case_id": "G02-09", "covers": ["cardio"], "refs": ["/workout_report/input/blocks/5"]},
+    {"case_id": "G02-10", "covers": ["superset"], "refs": ["/workout_report/input/blocks/1"]},
+    {"case_id": "G02-11", "covers": ["linked_skipped_replaced_added", "independent_skipped", "independent_added"], "refs": ["/plan/input/blocks/7", "/workout_report/input/blocks/2", "/workout_report/input/blocks/7", "/workout_report/input/blocks/8", "/saved_state_expectations/test_only_identity_map/planned_ids/27", "/saved_state_expectations/test_only_identity_map/planned_ids/28", "/saved_state_expectations/test_only_identity_map/planned_ids/29"]},
+    {"case_id": "G02-12", "covers": ["correction_history"], "refs": ["/correction_case", "/saved_state_expectations/test_only_identity_map/correction_source_materialization"]},
+    {"case_id": "G02-13", "covers": ["progress", "comparable_progress_sources", "confirmed_actual_record_history"], "refs": ["/progress_case", "/progress_case/test_only_comparability", "/saved_state_expectations/test_only_identity_map/synthetic_actual_record_history"]},
+    {"case_id": "G02-14", "covers": ["evidence_status_and_eligibility"], "refs": ["/evidence_case"]}
+  ]
+}
