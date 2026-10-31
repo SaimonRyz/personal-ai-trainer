@@ -31,3 +31,6 @@ RELEASE_BUILD.json
 ALPHA_IMAGE.json
 TRAINING_PLAN.md
 INVITRO_*
+
+# Separate local clone of the GitHub Wiki (its own Git repository).
+personal-ai-trainer-wiki/

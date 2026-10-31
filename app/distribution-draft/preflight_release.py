@@ -31,7 +31,8 @@ def _sha(path: Path) -> str:
 
 def _is_install_state(relative: Path) -> bool:
     parts = relative.parts
-    if parts and (parts[0] == ".git" or relative.name == ".DS_Store"
+    if parts and (parts[0] in {".git", "personal-ai-trainer-wiki"}
+                  or relative.name == ".DS_Store"
                   or any(part in {"__pycache__", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
                          for part in parts)):
         return True
@@ -40,6 +41,7 @@ def _is_install_state(relative: Path) -> bool:
     tail = parts[1:]
     return (
         tail in {(".env",), ("RELEASE_BUILD.json",)}
+        or tail == ("tmp", "trainer-lifecycle.lock")
         or len(tail) > 1 and tail[0] in {".venv", "wheelhouse"}
         or len(tail) > 2 and tail[:2] == ("tmp", "release-lifecycle")
     )
