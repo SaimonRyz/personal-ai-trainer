@@ -15,6 +15,7 @@ from trainer.infrastructure.db.context_repository import ContextRepository
 from trainer.transport.http.app import create_app
 from trainer.transport.http.contracts import (
     ConfirmRequest,
+    ExerciseCatalogDraftRequest,
     OnboardingDraftRequest,
     PlanDraftRequest,
     PlanLifecycleRequest,
@@ -869,3 +870,49 @@ def test_plan_requests_reject_client_equipment_snapshots(lifecycle: bool) -> Non
     ]
     assert len(rejected) == 2
     assert all(issue["loc"][-1] == "equipment_snapshot" for issue in rejected)
+
+
+def test_exercise_load_measurement_error_identifies_field_and_set_loads() -> None:
+    raw: dict[str, Any] = {
+        "context": {
+            "conversation_id": "contract-exercise",
+            "message_id": "contract-exercise-load",
+            "effective_at": datetime(2026, 10, 31, tzinfo=UTC).isoformat(),
+            "timezone": "Asia/Novokuznetsk",
+        },
+        "intent": "create",
+        "exercise": {
+            "canonical_name": "Synthetic bench press",
+            "category_code": "strength",
+            "unilateral": False,
+            "status_code": "active",
+            "aliases": [],
+            "muscle_roles": [
+                {"kind": "create_by_name", "name": "Synthetic chest", "status_code": "active", "role": "primary"}
+            ],
+            "measurements": [
+                {"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"},
+                {"metric_kind": "load", "requiredness": "required", "unit_family": "mass"},
+            ],
+            "equipment_requirements": [],
+        },
+    }
+    normalized = ExerciseCatalogDraftRequest.model_validate(
+        {**raw, "request_digest": "0" * 64}
+    ).model_dump(mode="json")
+    normalized.pop("request_digest")
+    raw["request_digest"] = digest_payload(normalized)
+    app = create_app(
+        Settings(api_token=SecretStr(TEST_TOKEN)),
+        context_service=ContextService(lambda **_: {}),
+    )
+    response = TestClient(app, raise_server_exceptions=False).post(
+        "/api/v1/commands/exercise-catalog-drafts",
+        headers={**required_headers(), "Idempotency-Key": "synthetic-exercise-load"},
+        json=raw,
+    )
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert error["field_errors"][0]["path"] == "exercise.measurements[1].metric_kind"
+    assert "planned or performed set" in error["field_errors"][0]["message_safe"]

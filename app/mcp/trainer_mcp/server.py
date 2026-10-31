@@ -477,7 +477,10 @@ def create_exercise_draft(
     expected_revision_id: UUID | None = None,
     reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None,
 ) -> dict[str, Any]:
-    """Create or fully replace an exercise aggregate draft, including its child tree."""
+    """Create or replace an exercise draft. Measurements: repetitions/count,
+    duration/time, distance/length (required or optional). Record external mass
+    in each planned or performed set's loads, not in exercise measurements.
+    """
     body = {
         "context": context(conversation_id, message_id, timezone),
         "intent": intent,

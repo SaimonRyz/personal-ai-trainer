@@ -55,7 +55,7 @@ def validate_exercise(payload: dict[str, Any]) -> None:
         roles.add(role_key)
 
     metrics: set[str] = set()
-    for measurement in exercise["measurements"]:
+    for index, measurement in enumerate(exercise["measurements"]):
         if measurement["metric_kind"] in metrics:
             raise DomainValidationError("duplicate measurement metric_kind")
         combination = (
@@ -64,7 +64,28 @@ def validate_exercise(payload: dict[str, Any]) -> None:
             measurement["unit_family"],
         )
         if combination not in ALLOWED_MEASUREMENT_COMBINATIONS:
-            raise DomainValidationError("incompatible exercise measurement combination")
+            kind = measurement["metric_kind"]
+            expected_family = {
+                "repetitions": "count",
+                "duration": "time",
+                "distance": "length",
+            }.get(kind)
+            if expected_family is None:
+                path = f"exercise.measurements[{index}].metric_kind"
+                detail = (
+                    "Use repetitions, duration, or distance. External mass is a load "
+                    "on each planned or performed set, not an exercise measurement."
+                )
+                code = "unsupported_metric_kind"
+            else:
+                path = f"exercise.measurements[{index}].unit_family"
+                detail = f"{kind} requires unit_family={expected_family}."
+                code = "incompatible_unit_family"
+            raise DomainValidationError(
+                "invalid exercise measurement",
+                status_code=422,
+                field_errors=[{"path": path, "code": code, "message_safe": detail}],
+            )
         metrics.add(measurement["metric_kind"])
 
     direct: set[tuple[str, str]] = set()

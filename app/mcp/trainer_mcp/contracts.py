@@ -133,9 +133,18 @@ ExerciseMuscleRoleInput = Annotated[
 
 
 class ExerciseMeasurementInput(ClosedModel):
-    metric_kind: str = Field(min_length=1, max_length=100)
+    metric_kind: str = Field(
+        min_length=1, max_length=100,
+        description=(
+            "Exercise measurement: repetitions, duration, or distance. "
+            "External mass belongs to planned/performed set loads."
+        ),
+    )
     requiredness: Literal["required", "optional"]
-    unit_family: str = Field(min_length=1, max_length=100)
+    unit_family: str = Field(
+        min_length=1, max_length=100,
+        description="count for repetitions, time for duration, length for distance",
+    )
 
 
 class ExerciseEquipmentRequirementInput(ClosedModel):

@@ -33,6 +33,7 @@ from trainer.transport.http.contracts import (
     DraftRevisionRequest,
     ErrorDetail,
     ErrorEnvelope,
+    FieldError,
     ExerciseCatalogDraftRequest,
     ExerciseExactResponse,
     ExerciseQueryRequest,
@@ -107,6 +108,7 @@ def error_response(
     correlation_id: UUID,
     retryable: bool = False,
     required_next_action: str | None = None,
+    field_errors: list[dict[str, str]] | None = None,
 ) -> JSONResponse:
     envelope = ErrorEnvelope(
         error=ErrorDetail(
@@ -115,7 +117,7 @@ def error_response(
             retryable=retryable,
             operation_state="failed",
             correlation_id=correlation_id,
-            field_errors=[],
+            field_errors=[FieldError(**item) for item in (field_errors or [])],
             changed_dependencies=[],
             required_next_action=required_next_action,
         ),
@@ -405,6 +407,7 @@ def create_app(
             correlation_id=correlation_id,
             retryable=error.status_code >= 500 and error.code != "inconsistent_domain_state",
             required_next_action=error.required_next_action,
+            field_errors=error.field_errors,
         )
 
     def require_context_service() -> ContextService:

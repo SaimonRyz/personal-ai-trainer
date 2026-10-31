@@ -24,12 +24,14 @@ class ContextApplicationError(RuntimeError):
         status_code: int = 400,
         audited: bool = False,
         required_next_action: str | None = None,
+        field_errors: list[dict[str, str]] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
         self.audited = audited
         self.required_next_action = required_next_action
+        self.field_errors = field_errors or []
 
 
 class ContextService:
@@ -55,6 +57,7 @@ class ContextService:
                 str(error),
                 status_code=error.status_code,
                 audited=True,
+                field_errors=error.field_errors,
             ) from error
         except RuntimeError as error:
             code = getattr(error, "code", "internal_error")
@@ -97,7 +100,10 @@ class ContextService:
         try:
             validate_exercise(payload)
         except DomainValidationError as error:
-            raise ContextApplicationError("validation_error", str(error)) from error
+            raise ContextApplicationError(
+                "validation_error", str(error),
+                status_code=error.status_code, field_errors=error.field_errors,
+            ) from error
 
     @staticmethod
     def validate_program(payload: dict[str, Any]) -> None:
