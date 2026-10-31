@@ -975,16 +975,16 @@
       "sha256": "3dbb3a783e13758d3f3b99de4f7dabbd5d26f97e0a83c61b299c4c6419de5a4b"
     },
     "trainer-workspace/.codex/skills/personal-trainer/SKILL.md": {
-      "size": 26416,
-      "sha256": "34186bb4c12533ddaef83bce174504dee8b163f372afd81e6288efa7bc4fba55"
+      "size": 27746,
+      "sha256": "4cd8a1219ed39516fbd1e64ee1bbc60e7a27e83d313365dba105337d7542550d"
     },
     "trainer-workspace/AGENTS.md": {
-      "size": 1854,
-      "sha256": "3cbb4fae01d7860954e2f27965db20301afaa69a9a3b3e7990690dc64e7c7528"
+      "size": 2610,
+      "sha256": "f7ec1927de21e2f4cb4f466278b38baebd77e14dce9bdecdd69fa5fe542028f3"
     },
     "trainer-workspace/README.md": {
-      "size": 1641,
-      "sha256": "1aa02f7948244513d2d3cdd70bd9db06b8d4db20083ac047185e52f099f40811"
+      "size": 3094,
+      "sha256": "69a34bd94f6e9f0d9bbcebb68bbdd09017ba5b39618660ad248e3d77d9ac273c"
     }
   }
 }
