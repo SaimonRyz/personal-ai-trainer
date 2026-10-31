@@ -3,8 +3,8 @@
   "status": "experimental_alpha",
   "files": {
     ".gitignore": {
-      "size": 371,
-      "sha256": "0efc005bd945772e5b378ecca27ce2c3033b461ef1a09c23d6bffdb142f74e46"
+      "size": 466,
+      "sha256": "3b3b8bb078638aa270ff44a7978869b7d583e1dfe665f4be016733343dce2bcd"
     },
     "AGENTS.md": {
       "size": 2826,
@@ -115,8 +115,8 @@
       "sha256": "52908f0f7fa43ae7f3915abcbb0befa48a75e8bf7ac76f04ddd0b2316a513bb6"
     },
     "app/distribution-draft/preflight_release.py": {
-      "size": 23330,
-      "sha256": "acd341165788515454e98cb89eabfe5bb5bba0a22f6346ff2e460aac4fcd0aff"
+      "size": 23431,
+      "sha256": "7328efdea6ed58c0a56f739395159b8fd063b66391ea8a874c123c47ab69dd4e"
     },
     "app/distribution-draft/prepare_release_wheels.py": {
       "size": 6837,
@@ -151,8 +151,8 @@
       "sha256": "6eccb2746eae3a0dddc80f7e508154471a3107b6d3d74d71c9b0ddbfc20835eb"
     },
     "app/distribution-draft/test_source_integrity.py": {
-      "size": 1185,
-      "sha256": "999e3b17567a1fc88248b8df32af0b34497944cb9521a5a3d7e1abcac97ed6e5"
+      "size": 1430,
+      "sha256": "6467b6595e5678ce7216d21e82b5c0fa2ca2e9060e075183c299a41f50f49911"
     },
     "app/distribution-draft/test_verify_release_inputs.py": {
       "size": 2532,

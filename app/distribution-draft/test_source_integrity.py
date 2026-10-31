@@ -7,6 +7,9 @@ import preflight_release as preflight
 
 def test_git_metadata_is_not_a_package_input():
     assert preflight._is_install_state(Path('.git/objects/example'))
+    assert preflight._is_install_state(Path('personal-ai-trainer-wiki/.git/config'))
+    assert preflight._is_install_state(Path('personal-ai-trainer-wiki/Home.md'))
+    assert preflight._is_install_state(Path('app/tmp/trainer-lifecycle.lock'))
     assert preflight._is_install_state(Path('.DS_Store'))
     assert not preflight._is_install_state(Path('app/src/trainer/config/settings.py'))
 
