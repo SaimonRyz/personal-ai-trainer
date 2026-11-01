@@ -8486,6 +8486,8 @@ class ContextRepository:
             "equipment_item": "предмет инвентаря",
             "equipment_availability": "доступность оборудования",
             "exercise": "упражнение",
+            "exercise_catalog_rules": "правила каталога упражнений",
+            "active_exercise_name": "название упражнения в каталоге",
             "goal": "цель",
             "knowledge_status_revision": "статус научного вывода",
             "muscle_group": "группа мышц",
@@ -8657,6 +8659,10 @@ class ContextRepository:
         lines = [f"{'  ' * depth}Основания и зависимости:"]
         count = 0
         reason_labels = {
+            "current exercise": "текущая редакция упражнения",
+            "existing muscle group": "существующая группа мышц",
+            "catalog and normalization rules": "правила каталога и сопоставления названий упражнений",
+            "active normalized exercise name": "проверка уникальности названия среди активных упражнений",
             "exact workout plan revision for corrected workout": "точная редакция плана исправляемой тренировки",
             "profile owner of corrected workout": "профиль-владелец исправляемой тренировки",
             "current recommendation calculation": "текущий расчёт, использованный рекомендацией",

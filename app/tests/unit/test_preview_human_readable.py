@@ -292,6 +292,12 @@ def test_exercise_preview_shows_resolved_muscles_once_without_internal_fields() 
             "status_code": "active",
         }, "role": "primary"}],
         "created_muscle_groups": [{"muscle_group_id": "group-1", "name": "Грудные мышцы"}],
+        "dependencies": [
+            {"dependency_type": "exercise_catalog_rules", "object_id": "rules-1",
+             "reason": "catalog and normalization rules"},
+            {"dependency_type": "active_exercise_name", "object_id": "name-1",
+             "reason": "active normalized exercise name"},
+        ],
     }
     original = deepcopy(payload)
 
@@ -300,7 +306,9 @@ def test_exercise_preview_shows_resolved_muscles_once_without_internal_fields() 
     assert "Грудные мышцы — основная; новая группа будет создана" in rendered
     assert rendered.count("Грудные мышцы") == 1
     assert "Показатель: повторения" in rendered
-    for fragment in ("Normalization version", "Normalized name", "Resolved muscle roles", "Muscle group:", "exercise-name-v1"):
+    assert "правила каталога и сопоставления названий упражнений" in rendered
+    assert "проверка уникальности названия среди активных упражнений" in rendered
+    for fragment in ("Normalization version", "Normalized name", "Resolved muscle roles", "Muscle group:", "exercise-name-v1", "catalog and normalization rules", "active normalized exercise name"):
         assert fragment not in rendered
     assert payload == original
 
