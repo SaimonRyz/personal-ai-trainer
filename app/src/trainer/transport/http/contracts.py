@@ -144,7 +144,15 @@ class OnboardingDraftRequest(ClosedModel):
     places: list[PlaceInput]
     equipment: list[ContextEquipmentInput]
     familiar_exercises: list[FamiliarExerciseSelection] = Field(default_factory=list)
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> OnboardingDraftRequest:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        return self
 
 
 class InventoryCreateDraftRequest(ClosedModel):
@@ -1637,7 +1645,7 @@ class PlanResponse(ClosedModel):
 class PreviewRequest(ClosedModel):
     context: RequestContext
     revision_id: UUID
-    detail_level: Literal["short", "full"]
+    detail_level: Literal["short", "full", "inventory", "details"]
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 

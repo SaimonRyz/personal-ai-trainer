@@ -112,6 +112,8 @@ def onboarding_request(*, effective_at: datetime) -> dict[str, Any]:
         {**raw, "request_digest": "0" * 64}
     ).model_dump(mode="json")
     normalized.pop("request_digest")
+    normalized.pop("draft_id")
+    normalized.pop("expected_revision_id")
     return {**raw, "request_digest": digest_payload(normalized)}
 
 
@@ -181,6 +183,8 @@ def test_onboarding_http_accepts_only_explicit_exact_familiar_exercise_refs() ->
         {**body, "request_digest": "0" * 64}
     ).model_dump(mode="json")
     normalized.pop("request_digest")
+    normalized.pop("draft_id")
+    normalized.pop("expected_revision_id")
     body["request_digest"] = digest_payload(normalized)
     calls: list[dict[str, Any]] = []
 
@@ -479,6 +483,8 @@ def test_d_g02_openapi_is_exact_for_all_requests_responses_and_errors() -> None:
                 "places",
                 "equipment",
                 "familiar_exercises",
+                "draft_id",
+                "expected_revision_id",
                 "request_digest",
             },
             {

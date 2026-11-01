@@ -666,7 +666,10 @@ def create_app(
         request: Request,
         idempotency_key: str = Header(alias="Idempotency-Key"),
     ) -> dict[str, Any]:
-        payload = body.model_dump(mode="json")
+        payload = body.model_dump(mode="json", exclude={"draft_id", "expected_revision_id"})
+        if body.draft_id is not None:
+            payload["draft_id"] = str(body.draft_id)
+            payload["expected_revision_id"] = str(body.expected_revision_id)
         service = require_context_service()
         service.verify_digest(payload, body.request_digest)
         normalized = service.prepare_onboarding(

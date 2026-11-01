@@ -230,8 +230,10 @@ def create_onboarding_draft(
     places: list[PlaceInput],
     equipment: list[ContextEquipmentInput],
     familiar_exercises: list[FamiliarExerciseSelection] | None = None,
+    draft_id: UUID | None = None,
+    expected_revision_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Create an onboarding draft, optionally with exact familiar exercise revisions."""
+    """Create or revise an onboarding draft; a revision replaces its full package."""
     body = {
         "context": context(conversation_id, message_id, timezone),
         "profile": json_model(profile),
@@ -240,6 +242,9 @@ def create_onboarding_draft(
         "equipment": [json_model(item) for item in equipment],
         "familiar_exercises": [json_model(item) for item in familiar_exercises or []],
     }
+    if draft_id is not None or expected_revision_id is not None:
+        body["draft_id"] = str(draft_id) if draft_id else None
+        body["expected_revision_id"] = str(expected_revision_id) if expected_revision_id else None
     with_request_digest(body)
     return api_call(
         "/api/v1/commands/onboarding-drafts",
@@ -762,12 +767,12 @@ def render_preview(
     message_id: MessageId,
     timezone: Timezone,
     revision_id: UUID,
-    detail_level: Literal["short", "full"],
+    detail_level: Literal["short", "full", "inventory", "details"],
     correlation_id: UUID,
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
 ) -> dict[str, Any]:
-    """Request the API's canonical preview for one exact draft revision."""
+    """Render one exact revision. For onboarding, full is the confirmable overview; inventory and details are nonconfirmable views of that revision."""
     body: dict[str, Any] = {
         "context": context(conversation_id, message_id, timezone),
         "revision_id": str(revision_id),

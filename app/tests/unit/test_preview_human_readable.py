@@ -38,12 +38,14 @@ SERVICE_ID = str(uuid4())
             {
                 "intent": "onboarding",
                 "profile_id": SERVICE_ID,
-                "goals": [{"name": "Сила", "target_date": "2027-01-01"}],
+                "profile": {"timezone": "UTC", "desired_sessions_per_week": 3},
+                "goals": [{"name": "Сила", "target_value": "100", "unit_code": "kilogram", "target_date": "2027-01-01", "start_value": None}],
                 "places": [{"name": "Дом", "place_type": "home"}],
-                "equipment": [{"name": "Гантели", "equipment_type": "dumbbell", "quantity": None}],
+                "equipment": [{"name": "Гантели", "equipment_type": "dumbbell", "quantity": None, "quantity_unit_code": None, "condition": None, "characteristics": {}}],
+                "familiar_exercises": [],
             },
-            "первого знакомства",
-            "Гантели",
+            "первое знакомство",
+            "гантель",
         ),
         (
             {
@@ -392,27 +394,24 @@ def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_emp
     }
 
     rendered = ContextRepository._render_preview(payload)
+    details = ContextRepository._render_preview(payload, detail_level="details")
 
     for visible in (
-        "Профиль:",
-        "Дата рождения: неизвестно",
-        "Дата начала тренировок: неизвестно",
-        "Желаемое количество тренировок в неделю: 3",
-        "Обычное место занятий: Зал",
-        "Комментарий: Synthetic profile note",
-        "Тип цели: силовая цель",
-        "Начальное значение: 80",
-        "Целевое значение: 100",
-        "Единица измерения: килограммы",
-        "Дата постановки цели: 2026-10-23",
-        "Целевая дата: 2027-10-23",
-        "Оборудование: нет",
-        "Знакомые упражнения: нет",
-        "Изменяемые объекты:",
+        "Первое знакомство: пока ничего не сохранено.",
+        "1 профиль, 1 цель, 1 место занятий, 0 позиций инвентаря",
+        "Цель 1: «Силовой результат»; целевой результат 100 кг к 23 октября 2027 года; текущий результат 80 кг.",
+        "обычное место «Зал»; 3 раза в неделю; часовой пояс UTC",
+        "Примечание к профилю: Synthetic profile note",
+        "Оборудование: нет.",
+        "Знакомые упражнения пока не добавляются.",
     ):
         assert visible in rendered
+    assert "Изменяемые объекты:" not in rendered
+    assert "Дата рождения: неизвестно" in details
+    assert "Тип цели: силовая цель" in details
+    assert "Изменяемые объекты:" not in details
     for machine_label in ("Profile:", "Start value:", "Change plan:"):
-        assert machine_label not in rendered
+        assert machine_label not in rendered + details
     for service_id in (profile_id, goal_id, place_id):
         assert service_id not in rendered
     assert "{" not in rendered and "}" not in rendered
@@ -442,7 +441,7 @@ def test_onboarding_preview_explains_equipment_fields_and_codes_in_russian() -> 
         "familiar_exercises": [],
     }
 
-    rendered = ContextRepository._render_preview(payload)
+    rendered = ContextRepository._render_preview(payload, detail_level="inventory")
 
     for detail in (
         "Характеристики:",
@@ -454,11 +453,68 @@ def test_onboarding_preview_explains_equipment_fields_and_codes_in_russian() -> 
         "Количество: 1",
         "Единица количества: пара",
         "Состояние: пригодно к использованию",
-        "Тип места: домашний спортзал",
     ):
         assert detail in rendered
     for code in ("Characteristics:", "Quantity unit code:", "usable", "home gym"):
         assert code not in rendered
+    assert "Тип места: домашний спортзал" in ContextRepository._render_preview(
+        payload, detail_level="details"
+    )
+
+
+def test_onboarding_overview_is_short_and_inventory_details_keep_every_card() -> None:
+    equipment = [
+        {
+            "name": f"Синтетическая лента {index}",
+            "equipment_type": "resistance_band",
+            "quantity": 1,
+            "quantity_unit_code": "piece",
+            "condition": "usable",
+            "characteristics": {},
+        }
+        for index in range(20)
+    ]
+    equipment += [
+        {
+            "name": f"Синтетический диск {mass}",
+            "equipment_type": "weight_plate",
+            "quantity": 2,
+            "quantity_unit_code": "piece",
+            "condition": "usable",
+            "characteristics": {"mass_per_item_kg": mass, "plate_bore_diameter_mm": None},
+        }
+        for mass in ("2.5", "5", "10", "15")
+    ]
+    equipment.append({
+        "name": "Синтетические упоры",
+        "equipment_type": "push_up_handles",
+        "quantity": 1,
+        "quantity_unit_code": "pair",
+        "condition": "usable",
+        "characteristics": {},
+    })
+    payload = {
+        "intent": "onboarding",
+        "profile": {"timezone": "UTC", "desired_sessions_per_week": 3},
+        "goals": [{"name": "Синтетическая цель", "target_value": None,
+                   "unit_code": None, "target_date": "2027-01-01", "start_value": None}],
+        "places": [],
+        "equipment": equipment,
+        "familiar_exercises": [],
+    }
+
+    overview = ContextRepository._render_preview(payload, detail_level="full")
+    inventory = ContextRepository._render_preview(payload, detail_level="inventory")
+
+    assert len(overview.splitlines()) <= 12
+    assert "25 позиций инвентаря" in overview
+    assert "2 шт. по 2.5 кг" in overview
+    assert "2 шт. по 15 кг" in overview
+    assert "упоров для отжиманий: 1 пара" in overview
+    assert "Синтетическая лента 19" not in overview
+    assert "25 позиций" in inventory
+    for item in equipment:
+        assert item["name"] in inventory
 
 
 def test_calculation_and_evidence_overrides_use_readable_renderer() -> None:

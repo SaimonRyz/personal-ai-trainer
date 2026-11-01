@@ -3374,8 +3374,36 @@ class ContextRepository:
             text("SELECT 1 FROM trainer.profiles WHERE archived_at IS NULL")
         ).first():
             raise ContextRepositoryError("revision_conflict", "active profile already exists", 409)
+        now = datetime.now(UTC)
+        target_draft = payload.get("draft_id")
+        target_revision = payload.get("expected_revision_id")
+        previous = None
+        if target_draft is not None:
+            previous = self.session.execute(
+                text("""
+                    SELECT d.draft_id,d.latest_revision_id,d.state,d.expires_at,
+                           r.revision_no,r.typed_payload
+                    FROM trainer.drafts d
+                    JOIN trainer.draft_revisions r ON r.draft_revision_id=d.latest_revision_id
+                    WHERE d.draft_id=:draft AND d.intent_type='onboarding'
+                    FOR UPDATE OF d
+                """),
+                {"draft": target_draft},
+            ).mappings().one_or_none()
+            if (
+                previous is None or previous["state"] != "open"
+                or previous["expires_at"] <= now
+                or str(previous["latest_revision_id"]) != str(target_revision)
+                or previous["typed_payload"]["context"]["conversation_id"]
+                != body["context"]["conversation_id"]
+            ):
+                raise ContextRepositoryError("stale_preview", "onboarding draft revision is no longer current", 409)
         body.pop("request_digest", None)
-        body["profile_id"] = str(uuid4())
+        body.pop("draft_id", None)
+        body.pop("expected_revision_id", None)
+        body["profile_id"] = (
+            previous["typed_payload"]["profile_id"] if previous else str(uuid4())
+        )
         for goal in body["goals"]:
             goal["goal_id"] = goal.get("goal_id") or str(uuid4())
         familiarity_refs: list[tuple[UUID, UUID]] = []
@@ -3415,10 +3443,25 @@ class ContextRepository:
             familiarity_refs.append((exercise_id, exercise_revision_id))
         body["change_plan"] = self._new_onboarding_change_plan(body)
         validate_onboarding(body)
-        draft_id, revision_id = uuid4(), uuid4()
+        draft_id = UUID(str(previous["draft_id"])) if previous else uuid4()
+        revision_id = uuid4()
+        revision_no = previous["revision_no"] + 1 if previous else 1
         digest = digest_payload(body)
-        now = datetime.now(UTC)
-        self.session.execute(
+        if previous is None:
+            # A new full package replaces every still-open onboarding proposal;
+            # an older preview must never remain confirmable after a correction.
+            self.session.execute(text("""
+                UPDATE trainer.draft_revisions SET trust_state='superseded'
+                WHERE draft_id IN (
+                    SELECT draft_id FROM trainer.drafts
+                    WHERE intent_type='onboarding' AND state='open'
+                ) AND trust_state='shown'
+            """))
+            self.session.execute(text("""
+                UPDATE trainer.drafts SET state='cancelled',cancelled_at=:now
+                WHERE intent_type='onboarding' AND state='open'
+            """), {"now": now})
+            self.session.execute(
             text("""
             INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,latest_revision_id,
                 expires_at,created_at) VALUES (:draft,'onboarding',NULL,'open',:revision,:expires,:now)
@@ -3429,21 +3472,35 @@ class ContextRepository:
                 "expires": now + timedelta(hours=24),
                 "now": now,
             },
-        )
+            )
+        else:
+            self.session.execute(
+                text("""
+                    UPDATE trainer.draft_revisions SET trust_state='superseded'
+                    WHERE draft_revision_id=:previous AND trust_state='shown'
+                """),
+                {"previous": previous["latest_revision_id"]},
+            )
         self.session.execute(
             text("""
             INSERT INTO trainer.draft_revisions(draft_revision_id,draft_id,revision_no,typed_payload,
                 content_digest,trust_state,confirmation_kind,created_at)
-            VALUES (:revision,:draft,1,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
+            VALUES (:revision,:draft,:number,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
         """),
             {
                 "revision": revision_id,
                 "draft": draft_id,
+                "number": revision_no,
                 "payload": json.dumps(body),
                 "digest": digest,
                 "now": now,
             },
         )
+        if previous is not None:
+            self.session.execute(
+                text("UPDATE trainer.drafts SET latest_revision_id=:revision WHERE draft_id=:draft"),
+                {"draft": draft_id, "revision": revision_id},
+            )
         familiarity_dependencies: list[dict[str, Any]] = []
         for exercise_id, exercise_revision_id in familiarity_refs:
             familiarity_dependencies.append(
@@ -3459,12 +3516,12 @@ class ContextRepository:
         response = {
             "draft_id": str(draft_id),
             "revision_id": str(revision_id),
-            "revision_no": 1,
+            "revision_no": revision_no,
             "content_digest": digest,
             "dependencies": familiarity_dependencies,
             "gaps": [],
             "preview_candidate": {
-                "summary": "Полный исходный контекст готов к предпросмотру",
+                "summary": "Краткий обзор первого знакомства готов к предпросмотру",
                 "confirmation_kind": "normal",
                 "complete": True,
             },
@@ -4445,7 +4502,7 @@ class ContextRepository:
         row = (
             self.session.execute(
                 text("""
-            SELECT dr.draft_revision_id,dr.typed_payload,dr.content_digest,dr.confirmation_kind,d.state,d.expires_at
+            SELECT dr.draft_revision_id,dr.typed_payload,dr.content_digest,dr.confirmation_kind,d.state,d.expires_at,d.intent_type
             FROM trainer.draft_revisions dr JOIN trainer.drafts d ON d.draft_id=dr.draft_id
             WHERE dr.draft_revision_id=:revision AND d.latest_revision_id=dr.draft_revision_id
         """),
@@ -4459,9 +4516,11 @@ class ContextRepository:
         if row["state"] != "open" or row["expires_at"] <= datetime.now(UTC):
             raise ContextRepositoryError("already_superseded", "draft is not open", 409)
         canonical_payload = dict(row["typed_payload"])
-        # A short request may render readable text, but it must remain
-        # incomplete and cannot authorize a shown/confirm transition.
+        # Only the full, confirmation-bound view may authorize a shown/confirm
+        # transition. Section details stay tied to this draft revision.
         detail_level = payload.get("detail_level", "full")
+        if detail_level in {"inventory", "details"} and row["intent_type"] != "onboarding":
+            raise ContextRepositoryError("validation_error", "section details are available only for onboarding", 422)
         dependencies = [
             {
                 "dependency_type": item["dependency_type"],
@@ -4571,7 +4630,8 @@ class ContextRepository:
         row = (
             self.session.execute(
                 text("""
-            SELECT p.*,d.expires_at,d.state,d.latest_revision_id FROM trainer.previews p
+            SELECT p.*,d.expires_at,d.state,d.latest_revision_id,d.intent_type,
+                   dr.typed_payload FROM trainer.previews p
             JOIN trainer.draft_revisions dr ON dr.draft_revision_id=p.draft_revision_id
             JOIN trainer.drafts d ON d.draft_id=dr.draft_id
                 WHERE p.preview_id=:id FOR UPDATE OF d
@@ -4585,6 +4645,8 @@ class ContextRepository:
             raise ContextRepositoryError("not_found", "preview not found", 404)
         if row["detail_level"] != "full":
             raise ContextRepositoryError("incomplete_preview", "preview must be full", 400)
+        if row["intent_type"] == "onboarding" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
         if (
             row["state"] != "open"
             or row["expires_at"] <= datetime.now(UTC)
@@ -4770,6 +4832,8 @@ class ContextRepository:
         )
         if row is None:
             raise ContextRepositoryError("not_found", "preview not found", 404)
+        if row["intent_type"] == "onboarding" and row["detail_level"] == "full" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
         if row["intent_type"] == "program":
             error = ContextRepositoryError(
                 "confirmation_not_supported", "technical program draft cannot be confirmed", 409
@@ -8923,7 +8987,19 @@ class ContextRepository:
 
     @staticmethod
     def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
-        del detail_level  # Persisted/confirmable previews are always rendered in full.
+        if all(key in payload for key in ("profile", "goals", "places", "equipment", "familiar_exercises")):
+            if detail_level in {"full", "short"}:
+                return ContextRepository._render_onboarding_overview(payload)
+            if detail_level == "inventory":
+                return ContextRepository._render_onboarding_inventory(payload)
+            if detail_level == "details":
+                labels = ContextRepository._preview_known_labels(payload)
+                subject = {
+                    key: payload[key]
+                    for key in ("profile", "goals", "places", "equipment", "familiar_exercises")
+                }
+                lines = ContextRepository._preview_text(subject, root=payload, known_labels=labels)
+                return "Подробности первого знакомства\n" + "\n".join(lines)
         if payload.get("intent") == "familiar_batch":
             from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
 
@@ -8937,6 +9013,173 @@ class ContextRepository:
                 "incomplete_preview", "preview has no user-readable domain content", 400
             )
         return ContextRepository._preview_heading(payload) + "\n" + "\n".join(lines)
+
+    @staticmethod
+    def _render_onboarding_overview(payload: dict[str, Any]) -> str:
+        """One complete decision summary; the bound payload retains every card."""
+        profile = payload.get("profile")
+        goals = payload.get("goals")
+        places = payload.get("places")
+        equipment = payload.get("equipment")
+        familiar = payload.get("familiar_exercises")
+        if not isinstance(profile, dict) or not all(
+            isinstance(items, list) for items in (goals, places, equipment, familiar)
+        ):
+            raise ContextRepositoryError("incomplete_preview", "onboarding overview is incomplete", 400)
+
+        def required(value: Any, field: str) -> str:
+            if value is None or not str(value).strip():
+                raise ContextRepositoryError("incomplete_preview", f"onboarding {field} is unreadable", 400)
+            return str(value).strip()
+
+        def quantity(item: dict[str, Any]) -> str:
+            count, unit = item.get("quantity"), item.get("quantity_unit_code")
+            if count is None and unit is None:
+                return "количество не указано"
+            if not isinstance(count, int) or count < 1 or unit not in {"piece", "pair", "set"}:
+                raise ContextRepositoryError("incomplete_preview", "equipment quantity is unreadable", 400)
+            if unit == "piece":
+                return f"{count} шт."
+            if unit == "pair":
+                return f"{count} {plural(count, 'пара', 'пары', 'пар')}"
+            return f"{count} {plural(count, 'комплект', 'комплекта', 'комплектов')}"
+
+        def plural(count: int, one: str, few: str, many: str) -> str:
+            return one if count % 10 == 1 and count % 100 != 11 else (
+                few if count % 10 in {2, 3, 4} and count % 100 not in {12, 13, 14} else many
+            )
+
+        def display_date(value: Any) -> str:
+            try:
+                day = date.fromisoformat(required(value, "goal date"))
+            except ValueError as error:
+                raise ContextRepositoryError("incomplete_preview", "goal date is unreadable", 400) from error
+            month = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря")[day.month - 1]
+            return f"{day.day} {month} {day.year} года"
+
+        lines = ["Первое знакомство: пока ничего не сохранено."]
+        lines.append(
+            "После подтверждения будут созданы: 1 профиль, "
+            f"{len(goals)} {plural(len(goals), 'цель', 'цели', 'целей')}, "
+            f"{len(places)} {plural(len(places), 'место', 'места', 'мест')} занятий, "
+            f"{len(equipment)} {plural(len(equipment), 'позиция', 'позиции', 'позиций')} инвентаря; "
+            f"знакомых упражнений — {len(familiar)}."
+        )
+        for index, goal in enumerate(goals, 1):
+            if not isinstance(goal, dict):
+                raise ContextRepositoryError("incomplete_preview", "goal is unreadable", 400)
+            units = {
+                "kilogram": "кг", "kg": "кг", "pound": "фунтов",
+                "repetition": "повт.", "second": "с", "meter": "м",
+                "centimeter": "см", "millimeter": "мм", "inch": "дюймов",
+            }
+            unit_code = goal.get("unit_code")
+            if unit_code is not None and unit_code not in units:
+                raise ContextRepositoryError("incomplete_preview", "goal unit is unreadable", 400)
+            unit = units.get(unit_code, "")
+            name = required(goal.get("name"), "goal name")
+            target = goal.get("target_value")
+            target_date = display_date(goal.get("target_date"))
+            start = goal.get("start_value")
+            target_text = (
+                "целевой результат не указан"
+                if target is None else f"целевой результат {target} {unit}".rstrip()
+            )
+            start_text = (
+                "текущий результат не указан"
+                if start is None else f"текущий результат {start} {unit}".rstrip()
+            )
+            lines.append(f"Цель {index}: «{name}»; {target_text} к {target_date}; {start_text.rstrip('.')}.")
+        usual_id = profile.get("usual_place_id")
+        usual = next(
+            (place.get("name") for place in places if isinstance(place, dict)
+             and str(place.get("place_id")) == str(usual_id)),
+            None,
+        ) if usual_id is not None else None
+        place_names = ", ".join(
+            required(place.get("name"), "place name") for place in places
+            if isinstance(place, dict)
+        )
+        if len([place for place in places if isinstance(place, dict)]) != len(places):
+            raise ContextRepositoryError("incomplete_preview", "place is unreadable", 400)
+        sessions = profile.get("desired_sessions_per_week")
+        lines.append(
+            "Тренировки: "
+            + (f"обычное место «{usual}»" if usual else "обычное место не указано")
+            + (f"; другие места: {place_names}" if place_names and not usual else "")
+            + (f"; {sessions} {plural(sessions, 'раз', 'раза', 'раз')} в неделю" if isinstance(sessions, int) and sessions > 0 else "; частота не указана")
+            + f"; часовой пояс {required(profile.get('timezone'), 'timezone')}."
+        )
+        if profile.get("comment"):
+            lines.append(f"Примечание к профилю: {profile['comment']}")
+        if equipment:
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for item in equipment:
+                if not isinstance(item, dict):
+                    raise ContextRepositoryError("incomplete_preview", "equipment is unreadable", 400)
+                kind = required(item.get("equipment_type"), "equipment type")
+                groups.setdefault(kind, []).append(item)
+            summaries = []
+            for kind, items in sorted(groups.items()):
+                label = ContextRepository._preview_value_label("equipment_type", kind)
+                if label == kind.replace("_", " "):
+                    raise ContextRepositoryError("incomplete_preview", "equipment type is unreadable", 400)
+                if kind == "weight_plate":
+                    values = ", ".join(
+                        quantity(item) + (
+                            f" по {item['characteristics']['mass_per_item_kg']} кг"
+                            if item.get("characteristics", {}).get("mass_per_item_kg") is not None
+                            else " (масса не указана)"
+                        ) for item in items
+                    )
+                else:
+                    values = ", ".join(quantity(item) for item in items)
+                summaries.append(f"{label} — {len(items)} поз. ({values})")
+            lines.append(f"Инвентарь: {len(equipment)} {plural(len(equipment), 'позиция', 'позиции', 'позиций')}. " + "; ".join(summaries) + ".")
+            conditions = {"usable": 0, "unusable": 0, None: 0}
+            for item in equipment:
+                condition = item.get("condition")
+                if condition not in conditions:
+                    raise ContextRepositoryError("incomplete_preview", "equipment condition is unreadable", 400)
+                conditions[condition] += 1
+            lines.append(
+                "Состояние инвентаря: "
+                f"пригодных — {conditions['usable']}, "
+                f"непригодных — {conditions['unusable']}, "
+                f"не указано — {conditions[None]}."
+            )
+            for item in equipment:
+                if item.get("equipment_type") == "push_up_handles":
+                    lines.append(f"Проверьте количество упоров для отжиманий: {quantity(item)}.")
+        else:
+            lines.append("Оборудование: нет.")
+        unknowns = []
+        if any(item.get("equipment_type") == "barbell" and item.get("characteristics", {}).get("mass_per_item_kg") is None for item in equipment):
+            unknowns.append("масса грифа")
+        if any(item.get("equipment_type") == "barbell" and item.get("characteristics", {}).get("bar_sleeve_diameter_mm") is None for item in equipment):
+            unknowns.append("диаметр посадочной части грифа")
+        if any(item.get("equipment_type") == "weight_plate" and item.get("characteristics", {}).get("plate_bore_diameter_mm") is None for item in equipment):
+            unknowns.append("диаметр отверстия дисков; совместимость с грифом не подтверждена")
+        if unknowns:
+            lines.append("Не указано: " + "; ".join(unknowns) + ".")
+        if familiar:
+            names = [required(item.get("name"), "familiar exercise name") for item in familiar if isinstance(item, dict)]
+            if len(names) != len(familiar):
+                raise ContextRepositoryError("incomplete_preview", "familiar exercise is unreadable", 400)
+            lines.append("Знакомые упражнения: " + ", ".join(names) + ".")
+        else:
+            lines.append("Знакомые упражнения пока не добавляются.")
+        lines.append("Можно запросить весь инвентарь или полные подробности этого черновика. Если всё верно, подтвердите сохранение перечисленного пакета.")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_onboarding_inventory(payload: dict[str, Any]) -> str:
+        equipment = payload.get("equipment")
+        if not isinstance(equipment, list):
+            raise ContextRepositoryError("incomplete_preview", "onboarding equipment is unreadable", 400)
+        labels = ContextRepository._preview_known_labels(payload)
+        lines = ContextRepository._preview_text(equipment, key="equipment", root=payload, known_labels=labels)
+        return f"Полный инвентарь этого черновика: {len(equipment)} позиций\n" + "\n".join(lines)
 
     @staticmethod
     def _render_exercise_preview(payload: dict[str, Any]) -> str:
