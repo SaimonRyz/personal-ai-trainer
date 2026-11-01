@@ -243,7 +243,7 @@ class ExerciseCatalogInput(ClosedModel):
     exercise_id: UUID | None = None
     canonical_name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=4000)
-    category_code: str = Field(min_length=1, max_length=100)
+    category_code: str = Field(min_length=1, max_length=100, description="Use strength or cardio; jump rope and treadmill walking are cardio.")
     unilateral: bool
     status_code: str = Field(min_length=1, max_length=100)
     comment: str | None = Field(default=None, max_length=2000)

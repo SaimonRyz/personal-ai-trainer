@@ -171,8 +171,8 @@
       "sha256": "6f56be871d12ac204a291292b92eabf856305fd35d0d5a1a00671e97455a2c51"
     },
     "app/mcp/trainer_mcp/contracts.py": {
-      "size": 42490,
-      "sha256": "940949414258162730142f511bfd74f7d7aeeeee2787ae9ac0ae9ed2acd174f8"
+      "size": 42573,
+      "sha256": "4f8fb023ea52d242a1e970c969982b31f6c7b30464320ba019abb0d34e437f10"
     },
     "app/mcp/trainer_mcp/read_tools.py": {
       "size": 4017,
@@ -535,8 +535,8 @@
       "sha256": "f18526812344d8260ff4383a4e941281c31c4948fb9e27b46060649d76a1e05f"
     },
     "app/src/trainer/transport/http/contracts.py": {
-      "size": 69673,
-      "sha256": "f0e92ce71adaa27b615a8b740be3d87a38368f7138388db2c1ecf8872f47b81f"
+      "size": 69756,
+      "sha256": "0d4d1193b5fa8afdf308e520d001c79daa6c511cdb2303ee28796cc814a697eb"
     },
     "app/src/trainer/transport/http/evidence_contracts.py": {
       "size": 6115,
