@@ -4553,9 +4553,13 @@ class ContextRepository:
         # binds the readable text and the exact dependency snapshot; exercise
         # previews need not print internal dependency identifiers.
         presentation_payload = {**canonical_payload, "dependencies": dependencies}
-        canonical_text = self._render_preview(
-            presentation_payload, detail_level=detail_level,
-            entry_name=payload.get("entry_name"),
+        canonical_text = (
+            self._render_workout_report_preview(presentation_payload)
+            if canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction")
+            else self._render_preview(
+                presentation_payload, detail_level=detail_level,
+                entry_name=payload.get("entry_name"),
+            )
         )
         gaps = canonical_payload.get("gaps", [])
         if canonical_payload.get("intent") == "workout_report":
@@ -4661,6 +4665,8 @@ class ContextRepository:
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "workout_report" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if (
             row["state"] != "open"
             or row["expires_at"] <= datetime.now(UTC)
@@ -4850,6 +4856,8 @@ class ContextRepository:
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "workout_report" and row["detail_level"] == "full" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if row["intent_type"] == "program":
             error = ContextRepositoryError(
                 "confirmation_not_supported", "technical program draft cannot be confirmed", 409
@@ -9108,6 +9116,28 @@ class ContextRepository:
                 "incomplete_preview", "preview has no user-readable domain content", 400
             )
         return ContextRepository._preview_heading(payload) + "\n" + "\n".join(lines)
+
+    def _render_workout_report_preview(self, payload: dict[str, Any]) -> str:
+        from trainer.infrastructure.db.workout_preview import render_workout_report
+
+        names: dict[str, str] = {}
+        for block in payload["report"]["blocks"]:
+            for exercise in block["exercises"]:
+                revision = str(exercise["exercise_revision_id"])
+                if revision in names:
+                    continue
+                name = self.session.execute(text("""
+                    SELECT canonical_name FROM trainer.exercise_revisions
+                    WHERE exercise_revision_id=:revision AND exercise_id=:exercise
+                """), {
+                    "revision": UUID(revision), "exercise": UUID(str(exercise["exercise_id"])),
+                }).scalar_one_or_none()
+                if name is None:
+                    raise ContextRepositoryError(
+                        "inconsistent_domain_state", "exact exercise name is unavailable", 500
+                    )
+                names[revision] = name
+        return render_workout_report(payload, names)
 
     @staticmethod
     def _render_onboarding_overview(payload: dict[str, Any]) -> str:
