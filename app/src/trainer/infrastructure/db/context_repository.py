@@ -3900,6 +3900,17 @@ class ContextRepository:
         )
         return response
 
+    def create_familiar_exercise_batch_draft(
+        self, *, payload: dict[str, Any], key: str,
+        correlation_id: UUID, causation_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
+
+        return FamiliarBatchRepository(self).create(
+            payload=payload, key=key, correlation_id=correlation_id,
+            causation_id=causation_id,
+        )
+
     def create_program_draft(
         self,
         *,
@@ -5033,6 +5044,12 @@ class ContextRepository:
             from trainer.infrastructure.db.measurements import MeasurementRepository
 
             MeasurementRepository(self).commit(
+                typed, confirmation_id, commit_result_id, changes, now
+            )
+        elif typed.get("intent") == "familiar_batch":
+            from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
+
+            FamiliarBatchRepository(self).commit(
                 typed, confirmation_id, commit_result_id, changes, now
             )
         elif "profile_id" in typed:
@@ -6750,9 +6767,19 @@ class ContextRepository:
                     raise ContextRepositoryError("stale_preview", "catalog rules changed", 409)
                 continue
             if dep["dependency_type"] == "active_exercise_name":
-                active_name_revision = self._active_name_revision(
-                    typed["exercise"]["normalized_name"]
-                )
+                if typed.get("intent") == "familiar_batch":
+                    normalized_names = [
+                        entry["exercise_draft"]["exercise"]["normalized_name"]
+                        for entry in typed["entries"] if entry["action"] == "create"
+                    ]
+                    names = [name for name in normalized_names
+                             if uuid5(NAMESPACE_URL, f"trainer:exercise-name:{name}") == dep["dependency_object_id"]]
+                    if len(names) != 1:
+                        raise ContextRepositoryError("stale_preview", "exercise name dependency is ambiguous", 409)
+                    normalized_name = names[0]
+                else:
+                    normalized_name = typed["exercise"]["normalized_name"]
+                active_name_revision = self._active_name_revision(normalized_name)
                 if (
                     active_name_revision != dep["dependency_revision_id"]
                     or digest_payload({"revision_id": str(active_name_revision)})
@@ -8882,6 +8909,10 @@ class ContextRepository:
     @staticmethod
     def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
         del detail_level  # Persisted/confirmable previews are always rendered in full.
+        if payload.get("intent") == "familiar_batch":
+            from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
+
+            return FamiliarBatchRepository.render(payload)
         if isinstance(payload.get("exercise"), dict) and "resolved_muscle_roles" in payload:
             return ContextRepository._render_exercise_preview(payload)
         labels = ContextRepository._preview_known_labels(payload)
@@ -9030,6 +9061,7 @@ class ContextDatabaseExecutor:
             "create_inventory_change_draft": "CMD-09",
             "create_measurement_session_draft": "CMD-11",
             "create_exercise_catalog_draft": "CMD-22",
+            "create_familiar_exercise_batch_draft": "CMD-25",
             "create_plan_draft": "CMD-05",
             "create_workout_report_draft": "CMD-06",
             "create_correction_draft": "CMD-07",

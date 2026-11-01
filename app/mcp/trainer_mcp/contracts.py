@@ -40,6 +40,18 @@ class FamiliarExerciseSelection(ClosedModel):
     exercise_ref: ExerciseRevisionRef
 
 
+class FamiliarExerciseBatchItem(ClosedModel):
+    source_name: str = Field(min_length=1, max_length=200)
+    exercise_ref: ExerciseRevisionRef | None = None
+    new_draft_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def one_resolution(self) -> FamiliarExerciseBatchItem:
+        if (self.exercise_ref is None) == (self.new_draft_revision_id is None):
+            raise ValueError("choose exactly one existing exercise or new exercise draft")
+        return self
+
+
 class GoalInput(ClosedModel):
     goal_id: UUID | None = None
     parent_goal_id: UUID | None = None

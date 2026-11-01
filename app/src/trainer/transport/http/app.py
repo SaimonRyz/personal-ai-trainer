@@ -35,6 +35,7 @@ from trainer.transport.http.contracts import (
     ErrorEnvelope,
     FieldError,
     ExerciseCatalogDraftRequest,
+    FamiliarExerciseBatchDraftRequest,
     ExerciseExactResponse,
     ExerciseQueryRequest,
     ExerciseSearchResponse,
@@ -323,6 +324,7 @@ def create_app(
             "/api/v1/commands/evidence-drafts": "CMD-14",
             "/api/v1/commands/conclusion-verification-drafts": "CMD-15",
             "/api/v1/commands/exercise-catalog-drafts": "CMD-22",
+            "/api/v1/commands/familiar-exercise-batches": "CMD-25",
             "/api/v1/commands/program-drafts": "CMD-03",
             "/api/v1/commands/program-publication-drafts": "CMD-04",
             "/api/v1/commands/plan-drafts": "CMD-05",
@@ -768,6 +770,30 @@ def create_app(
         return envelope(
             service.execute(
                 "create_exercise_catalog_draft",
+                payload=payload,
+                key=idempotency_key,
+                correlation_id=request.state.correlation_id,
+                causation_id=request.state.causation_id,
+            ),
+            request,
+        )
+
+    @app.post(
+        "/api/v1/commands/familiar-exercise-batches",
+        response_model=DataEnvelope[DraftResult],
+        responses=DOMAIN_ERROR_RESPONSES,
+    )
+    def familiar_exercise_batch_draft(
+        body: FamiliarExerciseBatchDraftRequest,
+        request: Request,
+        idempotency_key: str = Header(alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        payload = body.model_dump(mode="json")
+        service = require_context_service()
+        service.verify_digest(payload, body.request_digest)
+        return envelope(
+            service.execute(
+                "create_familiar_exercise_batch_draft",
                 payload=payload,
                 key=idempotency_key,
                 correlation_id=request.state.correlation_id,

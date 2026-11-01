@@ -141,6 +141,11 @@ MIGRATIONS = (
         "74ecb287331236e9c39b53d13609175d7d6c38c5df953b8ccf7ded43929a919a",
         "0022_profile_familiar_exercises.py",
     ),
+    MigrationSpec(
+        "0023_familiar_exercise_batch",
+        "d6f884130b50a2f750ab92f02ea7d5944fa92ca09d4ccbb239a73267abca319d",
+        "0023_familiar_exercise_batch.py",
+    ),
 )
 
 

@@ -270,6 +270,27 @@ class ExerciseCatalogDraftRequest(ClosedModel):
         return self
 
 
+class FamiliarExerciseBatchItem(ClosedModel):
+    source_name: str = Field(min_length=1, max_length=200)
+    exercise_ref: FamiliarExerciseRef | None = None
+    new_draft_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def one_resolution(self) -> FamiliarExerciseBatchItem:
+        if (self.exercise_ref is None) == (self.new_draft_revision_id is None):
+            raise ValueError("choose exactly one existing exercise or new exercise draft")
+        return self
+
+
+class FamiliarExerciseBatchDraftRequest(ClosedModel):
+    context: RequestContext
+    profile_id: UUID
+    expected_profile_revision_id: UUID
+    items: list[FamiliarExerciseBatchItem] = Field(min_length=1, max_length=100)
+    unresolved_names: list[str] = Field(default_factory=list, max_length=100)
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
 class ExerciseSearchRequest(ClosedModel):
     context: RequestContext
     mode: Literal["search"]

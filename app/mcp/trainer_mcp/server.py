@@ -18,6 +18,7 @@ from trainer_mcp.contracts import (
     ContextEquipmentInput,
     ExerciseCatalogInput,
     FamiliarExerciseSelection,
+    FamiliarExerciseBatchItem,
     GoalInput,
     PlaceInput,
     PlanTreeInput,
@@ -68,6 +69,7 @@ ALLOWED_STATIC_ROUTES = {
     "/api/v1/commands/goal-drafts",
     "/api/v1/commands/onboarding-drafts",
     "/api/v1/commands/exercise-catalog-drafts",
+    "/api/v1/commands/familiar-exercise-batches",
     "/api/v1/commands/program-drafts",
     "/api/v1/commands/program-publication-drafts",
     "/api/v1/commands/plan-drafts",
@@ -495,6 +497,44 @@ def create_exercise_draft(
         correlation_id,
         causation_id,
         idempotency_key,
+    )
+
+
+@mcp.tool(
+    structured_output=True,
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def create_familiar_exercise_batch_draft(
+    conversation_id: ConversationId,
+    message_id: MessageId,
+    timezone: Timezone,
+    correlation_id: UUID,
+    causation_id: UUID,
+    idempotency_key: IdempotencyKey,
+    profile_id: UUID,
+    expected_profile_revision_id: UUID,
+    items: list[FamiliarExerciseBatchItem],
+    unresolved_names: list[str] | None = None,
+) -> dict[str, Any]:
+    """Prepare one familiar-exercise list from exact catalog refs and new exercise drafts.
+    Show and confirm only this batch preview; do not confirm child exercise drafts.
+    """
+    body = {
+        "context": context(conversation_id, message_id, timezone),
+        "profile_id": str(profile_id),
+        "expected_profile_revision_id": str(expected_profile_revision_id),
+        "items": [json_model(item) for item in items],
+        "unresolved_names": unresolved_names or [],
+    }
+    with_request_digest(body)
+    return api_call(
+        "/api/v1/commands/familiar-exercise-batches",
+        body, correlation_id, causation_id, idempotency_key,
     )
 
 
