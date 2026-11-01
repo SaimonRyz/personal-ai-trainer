@@ -310,7 +310,7 @@ def test_exercise_preview_shows_resolved_muscles_once_without_internal_fields() 
     rendered = ContextRepository._render_preview(payload)
 
     assert "Создать упражнение «Жим штанги лёжа»?" in rendered
-    assert "После подтверждения карточка будет добавлена в каталог знакомых упражнений." in rendered
+    assert "После подтверждения карточка будет добавлена в каталог упражнений. Знакомым в профиле оно от этого не станет." in rendered
     assert "Грудные мышцы — основная; будет создана новая группа" in rendered
     assert rendered.count("Грудные мышцы") == 1
     assert "повторения — обязательное; единица: количество" in rendered

@@ -18,6 +18,10 @@
       "size": 3377,
       "sha256": "3894a128a8c80600ab10eee7c71732b7459ce7d6acbb120c6bc7f17f7cba5001"
     },
+    "FAMILIAR_EXERCISE_BATCH.md": {
+      "size": 7443,
+      "sha256": "ff18a08968e1a0fb49d6e197ac9d891abd00828c243fb185a2c48dc267282757"
+    },
     "KNOWN_ISSUES.md": {
       "size": 2315,
       "sha256": "24c63969617ba22b4b5f412f03268bc17355e90b0679c203ea59a4eda7c73cbf"
@@ -399,8 +403,8 @@
       "sha256": "a2a7cf0a8a3a59eede1826f261fa720da170b9b19e6a0daae7309bef7649bc58"
     },
     "app/src/trainer/infrastructure/db/context_repository.py": {
-      "size": 425846,
-      "sha256": "8b9b9c41479d10fa35f26c1022003b4253b56d81bade2242b123572fb020b6e7"
+      "size": 425906,
+      "sha256": "d2d692be19cc65a1499afed880c2c6657acd9676830d1351831d14d452732f37"
     },
     "app/src/trainer/infrastructure/db/engine.py": {
       "size": 532,
@@ -931,8 +935,8 @@
       "sha256": "8a72c302ff5ea11b2e03a82b72a33f8870a464c565949f3347179ca3dcb20ba3"
     },
     "app/tests/unit/test_preview_human_readable.py": {
-      "size": 31354,
-      "sha256": "2542ff7298c87f19e8f49bbbfc54d43609d91fb27713a513c0b63ff61d5b87ba"
+      "size": 31414,
+      "sha256": "5d5b66f8f16208c7954942b70537bc929e60800aef2e7c36e0b534b1d9b14983"
     },
     "app/tests/unit/test_preview_report_codes.py": {
       "size": 6870,
