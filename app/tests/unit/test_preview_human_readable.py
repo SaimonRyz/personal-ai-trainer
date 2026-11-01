@@ -418,6 +418,49 @@ def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_emp
     assert "{" not in rendered and "}" not in rendered
 
 
+def test_onboarding_preview_explains_equipment_fields_and_codes_in_russian() -> None:
+    payload = {
+        "intent": "onboarding",
+        "profile_id": str(uuid4()),
+        "profile": {"timezone": "Asia/Novokuznetsk"},
+        "goals": [],
+        "places": [{"name": "Дом", "place_type": "home_gym", "status": "active"}],
+        "equipment": [{
+            "name": "Упоры для отжиманий",
+            "equipment_type": "push_up_handles",
+            "maker": "Фабрика",
+            "model": "P1",
+            "quantity": 1,
+            "quantity_unit_code": "pair",
+            "condition": "usable",
+            "characteristics": {
+                "mass_per_item_kg": "0.8",
+                "bar_sleeve_diameter_mm": None,
+                "plate_bore_diameter_mm": None,
+            },
+        }],
+        "familiar_exercises": [],
+    }
+
+    rendered = ContextRepository._render_preview(payload)
+
+    for detail in (
+        "Характеристики:",
+        "Диаметр посадочной части грифа, мм: неизвестно",
+        "Масса одного предмета, кг: 0.8",
+        "Диаметр отверстия диска, мм: неизвестно",
+        "Производитель: Фабрика",
+        "Модель: P1",
+        "Количество: 1",
+        "Единица количества: пара",
+        "Состояние: пригодно к использованию",
+        "Тип места: домашний спортзал",
+    ):
+        assert detail in rendered
+    for code in ("Characteristics:", "Quantity unit code:", "usable", "home gym"):
+        assert code not in rendered
+
+
 def test_calculation_and_evidence_overrides_use_readable_renderer() -> None:
     calculation = CalculationRepository._render_preview(
         {
