@@ -23,5 +23,6 @@
   "0022_profile_familiar_exercises.py": "97c70674144dfd937db0877a2c0537480a7f89401ebba910a6db5921f6e378d7",
   "0023_familiar_exercise_batch.py": "82295e80cb53fffef89098c19ba1f4a9ee079a6947f134ff51320707d2185e81",
   "0024_parallel_bars_equipment.py": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2",
-  "0025_strength_goal_type.py": "bd646fd55fd5b0fb62dde22912f6def65a65346d2660150c8135214498bfb4ec"
+  "0025_strength_goal_type.py": "bd646fd55fd5b0fb62dde22912f6def65a65346d2660150c8135214498bfb4ec",
+  "0026_cardio_exercise_category.py": "b7230ed88fd9bfe57f71af55ebd3e2214b0b4357ebb72e79c0209279a4e4c67e"
 }

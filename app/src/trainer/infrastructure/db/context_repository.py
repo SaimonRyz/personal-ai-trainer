@@ -29,10 +29,14 @@ from trainer.domain.records import canonical_condition_key, strictly_improves
 
 
 class ContextRepositoryError(RuntimeError):
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+    def __init__(
+        self, code: str, message: str, status_code: int = 400,
+        *, field_errors: list[dict[str, str]] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+        self.field_errors = field_errors or []
         self.required_next_action: str | None = {
             "source_draft_not_open": "prepare_program_draft",
             "source_revision_not_current": "read_current_draft_revision",
@@ -6501,8 +6505,22 @@ class ContextRepository:
         return result
 
     def _assert_catalog_codes(self, exercise: dict[str, Any]) -> None:
+        categories = [
+            row["code"] for row in self.session.execute(
+                text("SELECT code FROM trainer.exercise_category_catalog WHERE archived_at IS NULL ORDER BY code")
+            ).mappings()
+        ]
+        if exercise["category_code"] not in categories:
+            expected = ", ".join(categories) if categories else "no active categories"
+            raise ContextRepositoryError(
+                "validation_error", "unknown exercise category", 422,
+                field_errors=[{
+                    "path": "exercise.category_code",
+                    "code": "unsupported_category_code",
+                    "message_safe": f"Use one of: {expected}.",
+                }],
+            )
         checks = [
-            ("exercise_category_catalog", [exercise["category_code"]]),
             ("exercise_status_catalog", [exercise["status_code"]]),
             ("metric_kind_catalog", [item["metric_kind"] for item in exercise["measurements"]]),
             ("unit_family_catalog", [item["unit_family"] for item in exercise["measurements"]]),
@@ -8912,7 +8930,10 @@ class ContextRepository:
             "leave_unknown": "оставить неизвестным",
         }
         by_field = {
-            "category_code": {"strength": "силовое упражнение"},
+            "category_code": {
+                "strength": "силовое упражнение",
+                "cardio": "кардиоупражнение",
+            },
             "alternative_group": {"external_load": "внешнее отягощение"},
             "kind": {
                 "existing": "существующая группа мышц",

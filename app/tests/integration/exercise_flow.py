@@ -672,6 +672,57 @@ def main() -> None:
             },
             f"dg06-exercise-{index}",
         )
+    unsupported = exercise("Synthetic unsupported category", alias="synthetic unsupported alias")
+    unsupported["category_code"] = "endurance"
+    rejected = post(
+        "/api/v1/commands/exercise-catalog-drafts",
+        {
+            "context": context("unknown-cardio-category"),
+            "intent": "create",
+            "exercise": unsupported,
+            "expected_revision_id": None,
+            "reason": "synthetic category check",
+        },
+        key="unknown-cardio-category", expected=422,
+    )
+    assert rejected["error"]["field_errors"] == [{
+        "path": "exercise.category_code",
+        "code": "unsupported_category_code",
+        "message_safe": "Use one of: cardio, strength.",
+    }]
+    for index, (name, equipment_type, measurements) in enumerate((
+        (
+            "Synthetic jump rope",
+            "jump_rope",
+            [{"metric_kind": "duration", "requiredness": "required", "unit_family": "time"}],
+        ),
+        (
+            "Synthetic treadmill walk",
+            "treadmill",
+            [
+                {"metric_kind": "duration", "requiredness": "required", "unit_family": "time"},
+                {"metric_kind": "distance", "requiredness": "optional", "unit_family": "length"},
+            ],
+        ),
+    )):
+        card = exercise(name, alias=f"synthetic cardio alias {index}")
+        card["category_code"] = "cardio"
+        card["muscle_roles"][0]["name"] = "Мышцы ног"
+        card["measurements"] = measurements
+        card["equipment_requirements"] = [{
+            "equipment_type": equipment_type,
+            "optionality": "required",
+            "alternative_group": None,
+        }]
+        preview, committed = draft_and_confirm(
+            {
+                "intent": "create", "exercise": card,
+                "expected_revision_id": None, "reason": "synthetic cardio category check",
+            },
+            f"cardio-exercise-{index}",
+        )
+        assert "Категория: кардиоупражнение" in preview["canonical_text"]
+        assert any(item["object_type"] == "exercise" for item in committed["created_revisions"])
     print("PASS: D-G03 exercise create/correct/query/immutability/permissions")
 
 

@@ -156,6 +156,11 @@ MIGRATIONS = (
         "ddfe1024d95cc4b558558f63e031f64e73969f069b081c2c85fe5e2e20573b6d",
         "0025_strength_goal_type.py",
     ),
+    MigrationSpec(
+        "0026_cardio_exercise_category",
+        "b3d559f62213c86a84c14898ea1660c7fdb547fde2919949e0a3a004b4322dea",
+        "0026_cardio_exercise_category.py",
+    ),
 )
 
 
