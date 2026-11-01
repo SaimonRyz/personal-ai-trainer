@@ -28,6 +28,7 @@ def post(path: str, body: dict, model: type, key: str) -> dict:
     normalized.pop("request_digest")
     if model is PreviewRequest:
         normalized.pop("entry_name", None)
+        normalized.pop("entry_key", None)
     normalized["request_digest"] = digest_payload(normalized)
     request = urllib.request.Request(
         BASE + path, data=json.dumps(normalized).encode(), method="POST",

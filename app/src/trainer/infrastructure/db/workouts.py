@@ -491,6 +491,7 @@ class WorkoutRepository:
         }
         typed = {
             "intent": "workout_report",
+            "context": payload["context"],
             "profile_id": str(row["profile_id"]),
             "session_id": str(session_id),
             "session_revision_id": str(revision_id),

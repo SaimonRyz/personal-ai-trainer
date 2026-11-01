@@ -102,6 +102,8 @@ def post(
             normalized.pop("request_digest", None)
             if model is PreviewRequest and normalized.get("entry_name") is None:
                 normalized.pop("entry_name")
+            if model is PreviewRequest and normalized.get("entry_key") is None:
+                normalized.pop("entry_key")
             payload = {**normalized, "request_digest": digest_payload(normalized)}
         else:
             model = (

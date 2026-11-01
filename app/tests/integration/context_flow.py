@@ -76,6 +76,8 @@ def post(
                         normalized.pop(field)
             if model is PreviewRequest and normalized.get("entry_name") is None:
                 normalized.pop("entry_name")
+            if model is PreviewRequest and normalized.get("entry_key") is None:
+                normalized.pop("entry_key")
             body = {**normalized, "request_digest": digest(normalized)}
         except ValidationError:
             if expected_error is None:

@@ -163,7 +163,7 @@ MIGRATIONS = (
     ),
     MigrationSpec(
         "0027_workout_import_batch",
-        "f5f909e9113025955bd78a0795f6981e7a2e15cc1131e4d5f3f66ed971ee39d7",
+        "8bf04dd86bc9d83c1a2c7e471deb09bcde39b36b713f4a90aa162f6d90e429eb",
         "0027_workout_import_batch.py",
     ),
 )

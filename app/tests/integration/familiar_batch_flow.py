@@ -44,6 +44,8 @@ def post(path: str, body: dict, *, key: str | None = None, model=None, expected:
                     normalized.pop(field)
         if model is PreviewRequest and normalized.get("entry_name") is None:
             normalized.pop("entry_name")
+        if model is PreviewRequest and normalized.get("entry_key") is None:
+            normalized.pop("entry_key")
         body = {**normalized, "request_digest": digest(normalized)}
     headers = {"Accept": "application/json", "Content-Type": "application/json",
                "Authorization": f"Bearer {TOKEN}", "X-Correlation-ID": str(uuid4()),

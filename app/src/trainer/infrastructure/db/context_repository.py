@@ -5178,21 +5178,16 @@ class ContextRepository:
         if typed.get("intent") == "workout_import_batch":
             from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
 
+            planned_changes = [dict(item) for item in changes]
             invalidated = WorkoutImportBatchRepository(self).commit(
                 typed, confirmation_id, commit_result_id, changes, now
             )
+            if changes != planned_changes:
+                raise ContextRepositoryError("inconsistent_domain_state", "import changes differ from preview", 500)
             if sorted(str(item) for item in invalidated) != sorted(
                 str(item["object_id"]) for item in expected_invalidated_refs
             ):
                 raise ContextRepositoryError("stale_preview", "correction effects changed", 409)
-            response["domain_changes"] = changes
-            response["created_revisions"] = [
-                change for change in changes if change["revision_id"] is not None
-            ]
-            self.session.execute(text("""
-                UPDATE trainer.commit_results SET result_payload=CAST(:payload AS jsonb)
-                WHERE commit_result_id=:result
-            """), {"payload": json.dumps(response), "result": commit_result_id})
         elif "plan_lifecycle" in typed:
             self._commit_plan_lifecycle(typed, confirmation_id, commit_result_id, changes, now)
         elif "publication_source" in typed:
