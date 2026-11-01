@@ -415,8 +415,8 @@
       "sha256": "8fe63d91f226ce873bf019595f3a06c4786e274e48e08ff6a2140cb15735eae0"
     },
     "app/src/trainer/infrastructure/db/calculations.py": {
-      "size": 26237,
-      "sha256": "a2a7cf0a8a3a59eede1826f261fa720da170b9b19e6a0daae7309bef7649bc58"
+      "size": 26336,
+      "sha256": "bcf60ce4b6c1df8faf1a0dd86ee1e7b32161fd10330f90a134a7a40bbb552e0a"
     },
     "app/src/trainer/infrastructure/db/context_repository.py": {
       "size": 448604,
@@ -427,8 +427,8 @@
       "sha256": "157a54a4b49a97f47213794569758c30425f069baf86c1ed8e34b25a9f33b0e1"
     },
     "app/src/trainer/infrastructure/db/evidence.py": {
-      "size": 64033,
-      "sha256": "575ddbf06d8a67a1e7e9fc9a042ed84ed7076d71aa482604509671d2dfa60175"
+      "size": 64179,
+      "sha256": "7ab2c38c18007afd8367e055e02ffd12fd4b297a919f2845f3675a09167514dc"
     },
     "app/src/trainer/infrastructure/db/familiar_batch.py": {
       "size": 23967,
@@ -647,8 +647,8 @@
       "sha256": "0e445623a17c7bbc9de51af689f3fd8f4fb0e7abef8d6c47c317225ca048ddf0"
     },
     "app/tests/integration/familiar_batch_flow.py": {
-      "size": 18061,
-      "sha256": "517bbdc0d5683fee7d3e5fec1f1cb0ac3202dc6b66b8ecbaf8958cb49be3bcf5"
+      "size": 18056,
+      "sha256": "8ae978f0c03374d1ab421a67d5ad1b3a74c38d5715f9185fe33e63559b7ce363"
     },
     "app/tests/integration/g02_actual_progress.py": {
       "size": 10377,

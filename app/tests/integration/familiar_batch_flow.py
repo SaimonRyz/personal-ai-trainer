@@ -120,7 +120,7 @@ def main() -> None:
     assert "Новые карточки: 2" in preview["canonical_text"]
     assert "«Уже есть в каталоге» → «Синтетическое упражнение из каталога»" in preview["canonical_text"]
     assert "Не будут записаны до уточнения: Неоднозначное синтетическое упражнение." in preview["canonical_text"]
-    assert preview["canonical_text"].count("Тестовая общая группа") == 1
+    assert "Тестовая общая группа" not in preview["canonical_text"]
     assert "служебные ID" not in preview["canonical_text"]
     card_detail = post("/api/v1/commands/previews", {
         "context": context("card-detail"), "revision_id": draft["revision_id"],
