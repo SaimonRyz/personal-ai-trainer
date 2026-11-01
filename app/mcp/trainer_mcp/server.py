@@ -280,7 +280,7 @@ def create_goal_draft(
     description: str | None = None,
     start_value: DecimalString | None = None,
     target_value: DecimalString | None = None,
-    unit_code: Annotated[str, Field(min_length=1, max_length=100)] | None = None,
+    unit_code: Annotated[str, Field(min_length=1, max_length=100, description="Use kilogram for kg or repetition for reps; never send kg.")] | None = None,
     comment: Annotated[str, Field(max_length=2000)] | None = None,
 ) -> dict[str, Any]:
     """Create a goal draft only; this does not persist a confirmed goal."""

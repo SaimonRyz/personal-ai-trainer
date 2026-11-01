@@ -60,7 +60,7 @@ class GoalInput(ClosedModel):
     goal_type: str = Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")
     start_value: Decimal | None = None
     target_value: Decimal | None = None
-    unit_code: str | None = None
+    unit_code: str | None = Field(default=None, description="Use catalog codes: kilogram for kg, repetition for reps; never send kg.")
     set_on: date
     target_date: date
     priority: int = Field(ge=1, le=100)

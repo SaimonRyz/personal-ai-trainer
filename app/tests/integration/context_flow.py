@@ -289,12 +289,12 @@ def main() -> None:
             {
                 "goal_id": None,
                 "parent_goal_id": None,
-                "name": "Synthetic pull-up goal",
+                "name": "Synthetic bench goal",
                 "description": None,
                 "goal_type": "strength",
-                "start_value": "5",
-                "target_value": "10",
-                "unit_code": "repetition",
+                "start_value": "80",
+                "target_value": "100",
+                "unit_code": "kilogram",
                 "set_on": "2026-08-24",
                 "target_date": "2026-12-31",
                 "priority": 10,
@@ -405,6 +405,15 @@ def main() -> None:
     )
     assert rejected_goal["error"]["code"] == "validation_error"
     assert rejected_goal["error"]["field_errors"][0]["path"] == "goals[0].goal_type"
+    unsupported_unit = json.loads(json.dumps(onboarding_body))
+    unsupported_unit["goals"][0]["unit_code"] = "kg"
+    rejected_unit = post(
+        "/api/v1/commands/onboarding-drafts", unsupported_unit,
+        key="onboarding-unsupported-unit-code", expected_error=400,
+    )
+    assert rejected_unit["error"]["code"] == "validation_error"
+    assert rejected_unit["error"]["field_errors"][0]["path"] == "goals[0].unit_code"
+    assert rejected_unit["error"]["field_errors"][0]["code"] == "unsupported_unit_code"
     draft = post("/api/v1/commands/onboarding-drafts", onboarding_body, key="onboarding-1")["data"]
     assert set(draft) == {
         "draft_id",
@@ -454,7 +463,7 @@ def main() -> None:
     assert preview_text.startswith("Первое знакомство: пока ничего не сохранено.\n")
     for detail in (
         familiarity_name,
-        "Synthetic pull-up goal",
+        "Synthetic bench goal",
         "31 декабря 2026 года",
         "Synthetic home gym",
         "1 позиция инвентаря",

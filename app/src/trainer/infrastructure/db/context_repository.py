@@ -3366,6 +3366,7 @@ class ContextRepository:
     ) -> dict[str, Any]:
         body = materialize_onboarding_defaults(payload)
         validate_onboarding(body)
+        self._validate_onboarding_catalog_refs(body)
         operation_id, replay = self._reserve("CMD-01", key, payload["request_digest"])
         if replay is not None:
             self._audit_replay(operation_id, "CMD-01", correlation_id, causation_id, key, replay)
@@ -3546,6 +3547,7 @@ class ContextRepository:
         causation_id: UUID | None = None,
     ) -> dict[str, Any]:
         validate_goal(payload["goal"])
+        self._validate_goal_catalog_refs(payload["goal"], path="goal")
         operation_id, replay = self._reserve("CMD-02", key, payload["request_digest"])
         if replay is not None:
             self._audit_replay(operation_id, "CMD-02", correlation_id, causation_id, key, replay)
@@ -7593,6 +7595,57 @@ class ContextRepository:
                 },
             )
 
+    def _require_catalog_code(
+        self, *, table: str, value: str | None, path: str, error_code: str,
+        message: str,
+    ) -> None:
+        if value is None:
+            return
+        # Table names are selected here, never supplied by a request.
+        if table not in {"goal_type_catalog", "unit_catalog", "place_type_catalog", "equipment_type_catalog"}:
+            raise ValueError("unsupported catalog lookup")
+        found = self.session.execute(
+            text(f"SELECT 1 FROM trainer.{table} WHERE code=:code AND archived_at IS NULL"),
+            {"code": value},
+        ).scalar_one_or_none()
+        if found is None:
+            raise DomainValidationError(
+                message,
+                field_errors=[{"path": path, "code": error_code, "message_safe": message}],
+            )
+
+    def _validate_goal_catalog_refs(self, goal: dict[str, Any], *, path: str) -> None:
+        self._require_catalog_code(
+            table="goal_type_catalog", value=goal.get("goal_type"),
+            path=f"{path}.goal_type", error_code="unsupported_goal_type",
+            message="Use performance or strength for the goal type.",
+        )
+        self._require_catalog_code(
+            table="unit_catalog", value=goal.get("unit_code"),
+            path=f"{path}.unit_code", error_code="unsupported_unit_code",
+            message=(
+                "Use kilogram for kilograms; kg is not a unit code."
+                if goal.get("unit_code") == "kg"
+                else "Use a supported unit code, such as kilogram or repetition."
+            ),
+        )
+
+    def _validate_onboarding_catalog_refs(self, typed: dict[str, Any]) -> None:
+        for index, goal in enumerate(typed["goals"]):
+            self._validate_goal_catalog_refs(goal, path=f"goals[{index}]")
+        for index, place in enumerate(typed["places"]):
+            self._require_catalog_code(
+                table="place_type_catalog", value=place.get("place_type"),
+                path=f"places[{index}].place_type", error_code="unsupported_place_type",
+                message="Use a supported place type such as home_gym.",
+            )
+        for index, item in enumerate(typed["equipment"]):
+            self._require_catalog_code(
+                table="equipment_type_catalog", value=item.get("equipment_type"),
+                path=f"equipment[{index}].equipment_type", error_code="unsupported_equipment_type",
+                message="Use a supported equipment type from the trainer catalog.",
+            )
+
     @staticmethod
     def _new_onboarding_change_plan(typed: dict[str, Any]) -> list[dict[str, Any]]:
         result = [
@@ -7670,6 +7723,7 @@ class ContextRepository:
         # Old drafts may predate stricter goal validation. Reject them with a
         # field error before attempting any domain insert.
         validate_onboarding(typed)
+        self._validate_onboarding_catalog_refs(typed)
         profile_id = UUID(typed["profile_id"])
         profile_revision = UUID(changes[0]["revision_id"])
         self.session.execute(
@@ -7822,6 +7876,8 @@ class ContextRepository:
         now: datetime,
     ) -> None:
         goal, intent, change = typed["goal"], typed["intent"], changes[0]
+        validate_goal(goal)
+        self._validate_goal_catalog_refs(goal, path="goal")
         if goal.get("parent_goal_id") is not None:
             self._assert_acyclic_parent(
                 UUID(str(goal["goal_id"])), UUID(str(goal["parent_goal_id"]))

@@ -171,16 +171,16 @@
       "sha256": "6f56be871d12ac204a291292b92eabf856305fd35d0d5a1a00671e97455a2c51"
     },
     "app/mcp/trainer_mcp/contracts.py": {
-      "size": 42388,
-      "sha256": "34c901515f6804cbafd115228aed0f1f7f5968622d330025e9bb1f4cce6cbc2d"
+      "size": 42490,
+      "sha256": "940949414258162730142f511bfd74f7d7aeeeee2787ae9ac0ae9ed2acd174f8"
     },
     "app/mcp/trainer_mcp/read_tools.py": {
       "size": 4017,
       "sha256": "c01704bc103cae5e28ab9c249a4510ba857c5c850829b017ee58c0983912d741"
     },
     "app/mcp/trainer_mcp/server.py": {
-      "size": 30533,
-      "sha256": "e79f8b91ff4acb2d66fe6abb27fb726a086e6ceb35ce96087b8e81e8e7875606"
+      "size": 30607,
+      "sha256": "773cedebba702af2c1d7805be3e5c8732f4a521b5285c8fd5b644624e33d540b"
     },
     "app/mcp/trainer_mcp/write_tools.py": {
       "size": 17300,
@@ -415,8 +415,8 @@
       "sha256": "a2a7cf0a8a3a59eede1826f261fa720da170b9b19e6a0daae7309bef7649bc58"
     },
     "app/src/trainer/infrastructure/db/context_repository.py": {
-      "size": 443877,
-      "sha256": "5b532b1bd2bd24aaaaa58108821a905183b0902a1aa98737507b1ec5dd8801f7"
+      "size": 446662,
+      "sha256": "5ea470f38be151e1a2de4ea5d219d80145e597e1cd28b64279ae3e7aff14672d"
     },
     "app/src/trainer/infrastructure/db/engine.py": {
       "size": 532,
@@ -531,8 +531,8 @@
       "sha256": "f18526812344d8260ff4383a4e941281c31c4948fb9e27b46060649d76a1e05f"
     },
     "app/src/trainer/transport/http/contracts.py": {
-      "size": 69571,
-      "sha256": "8aae7557796734225844734c8d24d8ce0df07033b5b69db993749024c3749a0d"
+      "size": 69673,
+      "sha256": "f0e92ce71adaa27b615a8b740be3d87a38368f7138388db2c1ecf8872f47b81f"
     },
     "app/src/trainer/transport/http/evidence_contracts.py": {
       "size": 6115,
@@ -615,8 +615,8 @@
       "sha256": "79391c9e1b775e6adb5dd86e823e8b3852d4319a634f2caf956c99c1e1b361b3"
     },
     "app/tests/integration/context_flow.py": {
-      "size": 48441,
-      "sha256": "52d35d5e60ee04377aef28bcbf5efc7f7beecb682d3aa587b68fec54d3332ef9"
+      "size": 48954,
+      "sha256": "8f0434e95fdd8b392fe4158a07ffb1087481a05130f8bee5548a0a28afa5a2a7"
     },
     "app/tests/integration/dg07_restart_probe.py": {
       "size": 1926,
