@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock
 from uuid import uuid4
@@ -272,6 +273,36 @@ def test_complete_exercise_preview_uses_readable_field_names_and_closed_values()
         "external_load", "create_by_name",
     ):
         assert machine_fragment not in rendered
+
+
+def test_exercise_preview_shows_resolved_muscles_once_without_internal_fields() -> None:
+    payload = {
+        "intent": "create",
+        "exercise": {
+            "canonical_name": "Жим штанги лёжа",
+            "normalized_name": "жим штанги лежа",
+            "normalization_version": "exercise-name-v1",
+            "category_code": "strength",
+            "muscle_roles": [{"kind": "create_by_name", "name": "Грудные мышцы", "role": "primary"}],
+            "measurements": [{"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}],
+        },
+        "resolved_muscle_roles": [{"muscle_group": {
+            "muscle_group_id": "group-1", "name": "Грудные мышцы",
+            "normalized_name": "грудные мышцы", "normalization_version": "muscle-name-v1",
+            "status_code": "active",
+        }, "role": "primary"}],
+        "created_muscle_groups": [{"muscle_group_id": "group-1", "name": "Грудные мышцы"}],
+    }
+    original = deepcopy(payload)
+
+    rendered = ContextRepository._render_preview(payload)
+
+    assert "Грудные мышцы — основная; новая группа будет создана" in rendered
+    assert rendered.count("Грудные мышцы") == 1
+    assert "Показатель: повторения" in rendered
+    for fragment in ("Normalization version", "Normalized name", "Resolved muscle roles", "Muscle group:", "exercise-name-v1"):
+        assert fragment not in rendered
+    assert payload == original
 
 
 def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_empty_lists() -> None:

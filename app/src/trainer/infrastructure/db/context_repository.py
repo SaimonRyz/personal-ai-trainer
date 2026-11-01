@@ -8877,7 +8877,47 @@ class ContextRepository:
     def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
         del detail_level  # Persisted/confirmable previews are always rendered in full.
         labels = ContextRepository._preview_known_labels(payload)
-        lines = ContextRepository._preview_text(payload, root=payload, known_labels=labels)
+        display_payload = deepcopy(payload)
+        muscle_lines: list[str] = []
+        if isinstance(display_payload.get("exercise"), dict):
+            # These values remain in the canonical payload, but are implementation
+            # details rather than decisions the owner needs to approve.
+            def hide_normalization(value: Any) -> None:
+                if isinstance(value, dict):
+                    value.pop("normalized_name", None)
+                    value.pop("normalization_version", None)
+                    for child in value.values():
+                        hide_normalization(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        hide_normalization(child)
+
+            hide_normalization(display_payload)
+            resolved = display_payload.pop("resolved_muscle_roles", None)
+            if resolved is not None:
+                created = display_payload.pop("created_muscle_groups", [])
+                display_payload["exercise"].pop("muscle_roles", None)
+                if not isinstance(resolved, list) or not isinstance(created, list):
+                    raise ContextRepositoryError(
+                        "incomplete_preview", "exercise muscle roles are incomplete", 400
+                    )
+                created_ids = {group.get("muscle_group_id") for group in created if isinstance(group, dict)}
+                muscle_lines = ["Группы мышц:"]
+                for item in resolved:
+                    group = item.get("muscle_group") if isinstance(item, dict) else None
+                    if not isinstance(group, dict) or not isinstance(group.get("name"), str) or not group["name"].strip():
+                        raise ContextRepositoryError(
+                            "incomplete_preview", "exercise muscle group has no readable name", 400
+                        )
+                    role = ContextRepository._preview_value_label("role", str(item.get("role")))
+                    if role not in {"основная", "дополнительная", "стабилизирующая"}:
+                        raise ContextRepositoryError(
+                            "incomplete_preview", "exercise muscle role is not readable", 400
+                        )
+                    creation = "; новая группа будет создана" if group.get("muscle_group_id") in created_ids else ""
+                    muscle_lines.append(f"  {group['name']} — {role}{creation}")
+        lines = ContextRepository._preview_text(display_payload, root=payload, known_labels=labels)
+        lines.extend(muscle_lines)
         if not lines:
             raise ContextRepositoryError(
                 "incomplete_preview", "preview has no user-readable domain content", 400
