@@ -7667,6 +7667,9 @@ class ContextRepository:
         changes: list[dict[str, Any]],
         now: datetime,
     ) -> None:
+        # Old drafts may predate stricter goal validation. Reject them with a
+        # field error before attempting any domain insert.
+        validate_onboarding(typed)
         profile_id = UUID(typed["profile_id"])
         profile_revision = UUID(changes[0]["revision_id"])
         self.session.execute(

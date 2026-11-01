@@ -22,5 +22,6 @@
   "0021_evidence_source_availability.py": "09a15641bf8bc50b4d5a968be9891a6a65c7e5c1f60ce06b5d0d3d3cb9cc61ea",
   "0022_profile_familiar_exercises.py": "97c70674144dfd937db0877a2c0537480a7f89401ebba910a6db5921f6e378d7",
   "0023_familiar_exercise_batch.py": "82295e80cb53fffef89098c19ba1f4a9ee079a6947f134ff51320707d2185e81",
-  "0024_parallel_bars_equipment.py": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2"
+  "0024_parallel_bars_equipment.py": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2",
+  "0025_strength_goal_type.py": "bd646fd55fd5b0fb62dde22912f6def65a65346d2660150c8135214498bfb4ec"
 }

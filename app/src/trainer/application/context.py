@@ -68,6 +68,7 @@ class ContextService:
                 status_code=status_code,
                 audited=True,
                 required_next_action=getattr(error, "required_next_action", None),
+                field_errors=getattr(error, "field_errors", None),
             ) from error
 
     @staticmethod
@@ -84,7 +85,8 @@ class ContextService:
             validate_onboarding(normalized)
         except DomainValidationError as error:
             raise ContextApplicationError(
-                "validation_error", str(error), status_code=error.status_code
+                "validation_error", str(error), status_code=error.status_code,
+                field_errors=error.field_errors,
             ) from error
         return normalized
 
@@ -93,7 +95,9 @@ class ContextService:
         try:
             validate_goal(payload)
         except DomainValidationError as error:
-            raise ContextApplicationError("validation_error", str(error)) from error
+            raise ContextApplicationError(
+                "validation_error", str(error), field_errors=error.field_errors
+            ) from error
 
     @staticmethod
     def validate_exercise(payload: dict[str, Any]) -> None:

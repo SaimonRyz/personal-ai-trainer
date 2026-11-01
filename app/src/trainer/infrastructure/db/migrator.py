@@ -151,6 +151,11 @@ MIGRATIONS = (
         "6df12136df187dd34a41252318f3fd9468a009c691af89c10da07905da998bf1",
         "0024_parallel_bars_equipment.py",
     ),
+    MigrationSpec(
+        "0025_strength_goal_type",
+        "ddfe1024d95cc4b558558f63e031f64e73969f069b081c2c85fe5e2e20573b6d",
+        "0025_strength_goal_type.py",
+    ),
 )
 
 

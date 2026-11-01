@@ -110,7 +110,7 @@ class GoalInput(ClosedModel):
     parent_goal_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
-    goal_type: str = Field(min_length=1, max_length=100)
+    goal_type: str = Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")
     start_value: Decimal | None = None
     target_value: Decimal | None = None
     unit_code: str | None = None

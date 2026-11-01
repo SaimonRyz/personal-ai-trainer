@@ -39,14 +39,15 @@ def test_migration_manifest_is_ordered_and_checksums_are_canonical() -> None:
         "0022_profile_familiar_exercises",
         "0023_familiar_exercise_batch",
         "0024_parallel_bars_equipment",
+        "0025_strength_goal_type",
     ]
     assert all(len(item.checksum) == 64 for item in MIGRATIONS)
     assert MIGRATIONS[-1].checksum == (
-        "6df12136df187dd34a41252318f3fd9468a009c691af89c10da07905da998bf1"
+        "ddfe1024d95cc4b558558f63e031f64e73969f069b081c2c85fe5e2e20573b6d"
     )
-    assert MIGRATIONS[-2].revision == "0023_familiar_exercise_batch"
+    assert MIGRATIONS[-2].revision == "0024_parallel_bars_equipment"
     assert all(len(item.revision) <= 32 for item in MIGRATIONS)
-    assert MIGRATIONS[-1].revision == "0024_parallel_bars_equipment"
+    assert MIGRATIONS[-1].revision == "0025_strength_goal_type"
 
 
 def test_pending_migrations_continue_after_active_revision() -> None:

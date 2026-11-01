@@ -272,7 +272,7 @@ def create_goal_draft(
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
     name: Annotated[str, Field(min_length=1, max_length=200)],
-    goal_type: Annotated[str, Field(min_length=1, max_length=100)],
+    goal_type: Annotated[str, Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")],
     set_on: date,
     target_date: date,
     priority: Annotated[int, Field(ge=1, le=100)],

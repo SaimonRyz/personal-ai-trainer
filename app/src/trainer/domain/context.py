@@ -34,9 +34,18 @@ def materialize_onboarding_defaults(payload: dict[str, Any]) -> dict[str, Any]:
     return deepcopy(payload)
 
 
-def validate_goal(goal: dict[str, Any]) -> None:
+def validate_goal(goal: dict[str, Any], *, path: str = "goal") -> None:
     if not str(goal.get("name", "")).strip():
         raise DomainValidationError("goal name is required")
+    if goal.get("goal_type") not in {"performance", "strength"}:
+        raise DomainValidationError(
+            "unsupported goal type; use performance or strength",
+            field_errors=[{
+                "path": f"{path}.goal_type",
+                "code": "unsupported_goal_type",
+                "message_safe": "Use performance or strength.",
+            }],
+        )
     set_on = date.fromisoformat(str(goal["set_on"]))
     target_date = date.fromisoformat(str(goal["target_date"]))
     if target_date < set_on:
@@ -55,8 +64,8 @@ def validate_onboarding(payload: dict[str, Any]) -> None:
     goals = payload["goals"]
     if not goals:
         raise DomainValidationError("at least one goal is required")
-    for goal in goals:
-        validate_goal(goal)
+    for index, goal in enumerate(goals):
+        validate_goal(goal, path=f"goals[{index}]")
     goal_ids = [UUID(str(item["goal_id"])) for item in goals if item.get("goal_id") is not None]
     if len(goal_ids) != len(set(goal_ids)):
         raise DomainValidationError("goal identifiers must be unique")

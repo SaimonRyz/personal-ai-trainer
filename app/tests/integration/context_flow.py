@@ -291,7 +291,7 @@ def main() -> None:
                 "parent_goal_id": None,
                 "name": "Synthetic pull-up goal",
                 "description": None,
-                "goal_type": "performance",
+                "goal_type": "strength",
                 "start_value": "5",
                 "target_value": "10",
                 "unit_code": "repetition",
@@ -397,6 +397,14 @@ def main() -> None:
     )["data"]
     assert still_empty["profile"] is None and still_empty["goals"] == []
 
+    unsupported_goal = json.loads(json.dumps(onboarding_body))
+    unsupported_goal["goals"][0]["goal_type"] = "unknown_goal_type"
+    rejected_goal = post(
+        "/api/v1/commands/onboarding-drafts", unsupported_goal,
+        key="onboarding-unsupported-goal-type", expected_error=400,
+    )
+    assert rejected_goal["error"]["code"] == "validation_error"
+    assert rejected_goal["error"]["field_errors"][0]["path"] == "goals[0].goal_type"
     draft = post("/api/v1/commands/onboarding-drafts", onboarding_body, key="onboarding-1")["data"]
     assert set(draft) == {
         "draft_id",
