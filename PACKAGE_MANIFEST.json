@@ -503,8 +503,8 @@
       "sha256": "803edf6bfbab5d5b9ef27fdd5351bed359896d7d4beb08cd9d26a42ff0757fb9"
     },
     "app/src/trainer/lifecycle/release.py": {
-      "size": 14252,
-      "sha256": "0d123a03e041e56679c2dab7e2f9de9ce8e95bebda9a6499c36daa09f27d1d25"
+      "size": 17140,
+      "sha256": "5128b5a3c5be1bd256f57cf3f1ef9619163057012c51dc487362eba64795a819"
     },
     "app/src/trainer/lifecycle/synthetic.py": {
       "size": 32791,
