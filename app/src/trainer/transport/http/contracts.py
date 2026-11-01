@@ -296,7 +296,15 @@ class FamiliarExerciseBatchDraftRequest(ClosedModel):
     expected_profile_revision_id: UUID
     items: list[FamiliarExerciseBatchItem] = Field(min_length=1, max_length=100)
     unresolved_names: list[str] = Field(default_factory=list, max_length=100)
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> FamiliarExerciseBatchDraftRequest:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        return self
 
 
 class ExerciseSearchRequest(ClosedModel):
@@ -1645,8 +1653,15 @@ class PlanResponse(ClosedModel):
 class PreviewRequest(ClosedModel):
     context: RequestContext
     revision_id: UUID
-    detail_level: Literal["short", "full", "inventory", "details"]
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups"]
+    entry_name: str | None = Field(default=None, min_length=1, max_length=200)
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_section_target(self) -> PreviewRequest:
+        if (self.detail_level == "exercise") != (self.entry_name is not None):
+            raise ValueError("entry_name is required only for exercise detail")
+        return self
 
 
 class PreviewShownRequest(ClosedModel):

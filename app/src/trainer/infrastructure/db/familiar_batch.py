@@ -36,6 +36,24 @@ class FamiliarBatchRepository:
         """), {"id": profile_id}).scalar_one_or_none()
         if current != expected:
             raise ContextRepositoryError("revision_conflict", "profile revision changed", 409)
+        previous = None
+        if payload.get("draft_id") is not None:
+            previous = self.session.execute(text("""
+                SELECT d.draft_id,d.latest_revision_id,d.owner_profile_id,d.state,d.expires_at,
+                       dr.revision_no,dr.typed_payload
+                FROM trainer.drafts d
+                JOIN trainer.draft_revisions dr ON dr.draft_revision_id=d.latest_revision_id
+                WHERE d.draft_id=:draft AND d.intent_type='familiar_exercise_batch'
+                FOR UPDATE OF d
+            """), {"draft": payload["draft_id"]}).mappings().one_or_none()
+            if (
+                previous is None or previous["state"] != "open"
+                or previous["expires_at"] <= datetime.now(UTC)
+                or str(previous["latest_revision_id"]) != str(payload["expected_revision_id"])
+                or previous["owner_profile_id"] != profile_id
+                or previous["typed_payload"]["expected_profile_revision_id"] != str(expected)
+            ):
+                raise ContextRepositoryError("stale_preview", "familiar batch revision is no longer current", 409)
         prior = {
             str(row["exercise_id"]): str(row["exercise_revision_id"])
             for row in self.session.execute(text("""
@@ -155,24 +173,36 @@ class FamiliarBatchRepository:
                     {"exercise_ref": entry["exercise_ref"]} for entry in entries
                     if entry["action"] == "existing"
                 ]}
-        draft_id, revision_id = uuid4(), uuid4()
+        draft_id = UUID(str(previous["draft_id"])) if previous else uuid4()
+        revision_id = uuid4()
+        revision_no = previous["revision_no"] + 1 if previous else 1
         digest = digest_payload(body)
-        self.session.execute(text("""
-            INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,latest_revision_id,expires_at,created_at)
-            VALUES (:draft,'familiar_exercise_batch',:profile,'open',:revision,:expires,:now)
-        """), {"draft": draft_id, "profile": profile_id, "revision": revision_id,
-               "expires": now + timedelta(hours=24), "now": now})
+        if previous is None:
+            self.session.execute(text("""
+                INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,latest_revision_id,expires_at,created_at)
+                VALUES (:draft,'familiar_exercise_batch',:profile,'open',:revision,:expires,:now)
+            """), {"draft": draft_id, "profile": profile_id, "revision": revision_id,
+                   "expires": now + timedelta(hours=24), "now": now})
+        else:
+            self.session.execute(text("""
+                UPDATE trainer.draft_revisions SET trust_state='superseded'
+                WHERE draft_revision_id=:previous AND trust_state='shown'
+            """), {"previous": previous["latest_revision_id"]})
         self.session.execute(text("""
             INSERT INTO trainer.draft_revisions(draft_revision_id,draft_id,revision_no,typed_payload,
                 content_digest,trust_state,confirmation_kind,created_at)
-            VALUES (:revision,:draft,1,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
+            VALUES (:revision,:draft,:number,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
         """), {"revision": revision_id, "draft": draft_id, "payload": json.dumps(body),
-               "digest": digest, "now": now})
+               "number": revision_no, "digest": digest, "now": now})
+        if previous is not None:
+            self.session.execute(text("""
+                UPDATE trainer.drafts SET latest_revision_id=:revision WHERE draft_id=:draft
+            """), {"draft": draft_id, "revision": revision_id})
         unique_dependencies = {(kind, obj, revision): reason for kind, obj, revision, reason in dependencies}
         recorded = [repo._add_dependency(revision_id, kind, obj, revision, reason, now)
                     for (kind, obj, revision), reason in unique_dependencies.items()]
         response = {"draft_id": str(draft_id), "revision_id": str(revision_id),
-                    "revision_no": 1, "content_digest": digest, "dependencies": recorded,
+                    "revision_no": revision_no, "content_digest": digest, "dependencies": recorded,
                     "gaps": [], "preview_candidate": {"summary": "Пакет знакомых упражнений готов",
                     "confirmation_kind": "normal", "complete": True}}
         repo._finish(operation_id, response)
@@ -181,41 +211,119 @@ class FamiliarBatchRepository:
         return response
 
     @staticmethod
-    def render(typed: dict[str, Any]) -> str:
+    def render(
+        typed: dict[str, Any], *, detail_level: str = "full",
+        entry_name: str | None = None,
+    ) -> str:
         from trainer.infrastructure.db.context_repository import ContextRepository
 
         entries = typed["entries"]
+        created_groups = {
+            group["normalized_name"]: group
+            for item in entries if item["action"] == "create"
+            for group in item["exercise_draft"]["created_muscle_groups"]
+        }
+        if detail_level == "exercise":
+            matches = [
+                item for item in entries
+                if item["action"] == "create" and entry_name is not None
+                and normalize_name(entry_name) in {
+                    normalize_name(item["source_name"]), normalize_name(item["name"])
+                }
+            ]
+            if len(matches) != 1:
+                raise ContextRepositoryError(
+                    "validation_error", "select one new card by its exact source or final name", 422
+                )
+            item = matches[0]
+            return (
+                f"Карточка из этого пакета: «{item['source_name']}» → «{item['name']}»\n"
+                + ContextRepository._render_exercise_preview(item["exercise_draft"])
+            )
+        if detail_level == "groups":
+            if not created_groups:
+                return "Новые группы мышц в этом пакете: нет."
+            lines = [f"Новые группы мышц в этом пакете: {len(created_groups)}."]
+            for group in sorted(created_groups.values(), key=lambda item: item["name"]):
+                group_id = group["muscle_group_id"]
+                used_by = [
+                    item["name"] for item in entries if item["action"] == "create"
+                    and any(
+                        role["muscle_group"]["muscle_group_id"] == group_id
+                        for role in item["exercise_draft"]["resolved_muscle_roles"]
+                    )
+                ]
+                lines.append(f"• {group['name']}: " + "; ".join(used_by) + ".")
+            return "\n".join(lines)
+        if detail_level not in {"full", "short"}:
+            raise ContextRepositoryError("validation_error", "unsupported familiar batch detail", 422)
         additions = sum(not item.get("previously_familiar", False) for item in entries)
         refreshed = sum(item.get("previously_familiar", False) and not item.get("already_familiar", False)
                         for item in entries)
         created = sum(item["action"] == "create" for item in entries)
-        lines = ["Добавить знакомые упражнения?",
-                 f"Новые отметки знакомости: {additions}. Новые карточки: {created}."]
+        existing = len(entries) - created
+        total = len(entries)
+        def counted(number: int, one: str, few: str, many: str) -> str:
+            ending = number % 100
+            form = many if 11 <= ending <= 14 else (
+                one if number % 10 == 1 else few if 2 <= number % 10 <= 4 else many
+            )
+            return f"{number} {form}"
+
+        lines = [
+            f"Добавить {counted(total, 'знакомое упражнение', 'знакомых упражнения', 'знакомых упражнений')}?"
+            if additions == total else
+            f"Добавить или обновить {counted(total, 'знакомое упражнение', 'знакомых упражнения', 'знакомых упражнений')}?",
+            f"Уже в каталоге: {existing}. Новые карточки: {created}. "
+            "Все выбранные упражнения будут в списке знакомых. Пока ничего не сохранено.",
+        ]
+        if additions != total:
+            lines.append(f"Новые отметки знакомости: {additions}.")
         if refreshed:
             lines.append(f"Отметки, привязка которых обновится до текущей карточки: {refreshed}.")
+        for action, label in (("existing", "Уже в каталоге"), ("create", "Новые карточки")):
+            names = [item["name"] for item in entries if item["action"] == action]
+            if names:
+                lines.append(f"{label} ({len(names)}): " + "; ".join(names) + ".")
+        interpretations = [
+            f"«{item['source_name']}» → «{item['name']}»"
+            for item in entries if item["source_name"] != item["name"]
+        ]
+        if interpretations:
+            lines.append("Проверь трактовки: " + "; ".join(interpretations) + ".")
+        special = []
         for item in entries:
-            action = "будет создано и отмечено знакомым" if item["action"] == "create" else (
-                "уже отмечено знакомым" if item["already_familiar"] else
-                "знакомо; ссылка обновится до текущей карточки" if item["previously_familiar"] else
-                "найдено; будет отмечено знакомым"
+            if item["action"] != "create":
+                continue
+            card = item["exercise_draft"]["exercise"]
+            metrics = [part["metric_kind"] for part in card["measurements"]]
+            if card["category_code"] == "strength" and metrics == ["repetitions"]:
+                continue
+            metric_labels = ", ".join(
+                ContextRepository._preview_value_label("metric_kind", kind)
+                for kind in metrics
             )
-            lines.append(f"• {item['source_name']} → {item['name']}: {action}.")
-            if item["action"] == "create":
-                card = item["exercise_draft"]["exercise"]
-                metrics = ", ".join(ContextRepository._preview_value_label(
-                    "metric_kind", measurement["metric_kind"]
-                ) for measurement in card["measurements"])
-                equipment = ", ".join(ContextRepository._preview_value_label(
-                    "equipment_type", requirement["equipment_type"]
-                ) for requirement in card["equipment_requirements"]) or "не требуется"
-                lines.append(f"  Новая карточка: результат — {metrics}; оборудование — {equipment}.")
-        groups = {group["name"] for item in entries if item["action"] == "create"
-                  for group in item["exercise_draft"]["created_muscle_groups"]}
-        if groups:
-            lines.append("Будут созданы группы мышц: " + ", ".join(sorted(groups)) + ".")
+            equipment = ", ".join(
+                ContextRepository._preview_value_label("equipment_type", part["equipment_type"])
+                for part in card["equipment_requirements"] if part["optionality"] == "required"
+            ) or "без обязательного оборудования"
+            category = ContextRepository._preview_value_label("category_code", card["category_code"])
+            special.append(f"«{item['name']}» — {category}; результат: {metric_labels}; {equipment}")
+        if special:
+            lines.append("Проверь особенности карточек: " + "; ".join(special) + ".")
+        lines.append(
+            "Дополнительно будут созданы "
+            + counted(len(created_groups), "группа мышц", "группы мышц", "групп мышц") + "."
+        )
         if typed.get("unresolved_names"):
             lines.append("Не будут записаны до уточнения: " + ", ".join(typed["unresolved_names"]) + ".")
-        lines.append("До подтверждения каталог и профиль не изменены.")
+        lines.append(
+            "Полное описание новой карточки и связи групп мышц можно запросить до подтверждения. "
+            "Если всё верно, подтвердите весь список: "
+            + counted(total, "упражнение", "упражнения", "упражнений") + ", "
+            + counted(created, "новая карточка", "новые карточки", "новых карточек") + ", "
+            + counted(len(created_groups), "новая группа мышц", "новые группы мышц", "новых групп мышц") + "."
+        )
         return "\n".join(lines)
 
     def commit(

@@ -525,8 +525,10 @@ def create_familiar_exercise_batch_draft(
     expected_profile_revision_id: UUID,
     items: list[FamiliarExerciseBatchItem],
     unresolved_names: list[str] | None = None,
+    draft_id: UUID | None = None,
+    expected_revision_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Prepare one familiar-exercise list from exact catalog refs and new exercise drafts.
+    """Prepare or revise one familiar-exercise list from exact refs and new exercise drafts.
     Show and confirm only this batch preview; do not confirm child exercise drafts.
     """
     body = {
@@ -536,6 +538,9 @@ def create_familiar_exercise_batch_draft(
         "items": [json_model(item) for item in items],
         "unresolved_names": unresolved_names or [],
     }
+    if draft_id is not None or expected_revision_id is not None:
+        body["draft_id"] = str(draft_id) if draft_id else None
+        body["expected_revision_id"] = str(expected_revision_id) if expected_revision_id else None
     with_request_digest(body)
     return api_call(
         "/api/v1/commands/familiar-exercise-batches",
@@ -767,17 +772,20 @@ def render_preview(
     message_id: MessageId,
     timezone: Timezone,
     revision_id: UUID,
-    detail_level: Literal["short", "full", "inventory", "details"],
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups"],
     correlation_id: UUID,
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
+    entry_name: str | None = None,
 ) -> dict[str, Any]:
-    """Render one exact revision. For onboarding, full is the confirmable overview; inventory and details are nonconfirmable views of that revision."""
+    """Render one exact revision. Full confirms; onboarding and familiar-batch sections are nonconfirmable views."""
     body: dict[str, Any] = {
         "context": context(conversation_id, message_id, timezone),
         "revision_id": str(revision_id),
         "detail_level": detail_level,
     }
+    if entry_name is not None:
+        body["entry_name"] = entry_name
     body["request_digest"] = canonical_digest(body)
     return api_call(
         "/api/v1/commands/previews", body, correlation_id, causation_id, idempotency_key

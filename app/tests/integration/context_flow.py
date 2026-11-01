@@ -74,6 +74,8 @@ def post(
                 for field in ("draft_id", "expected_revision_id"):
                     if normalized.get(field) is None:
                         normalized.pop(field)
+            if model is PreviewRequest and normalized.get("entry_name") is None:
+                normalized.pop("entry_name")
             body = {**normalized, "request_digest": digest(normalized)}
         except ValidationError:
             if expected_error is None:

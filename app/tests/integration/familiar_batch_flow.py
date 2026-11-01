@@ -38,6 +38,12 @@ def post(path: str, body: dict, *, key: str | None = None, model=None, expected:
     if key is not None:
         normalized = model.model_validate({**body, "request_digest": "0" * 64}).model_dump(mode="json")
         normalized.pop("request_digest")
+        if model is FamiliarExerciseBatchDraftRequest:
+            for field in ("draft_id", "expected_revision_id"):
+                if normalized.get(field) is None:
+                    normalized.pop(field)
+        if model is PreviewRequest and normalized.get("entry_name") is None:
+            normalized.pop("entry_name")
         body = {**normalized, "request_digest": digest(normalized)}
     headers = {"Accept": "application/json", "Content-Type": "application/json",
                "Authorization": f"Bearer {TOKEN}", "X-Correlation-ID": str(uuid4()),
@@ -112,10 +118,54 @@ def main() -> None:
         "context": context("preview"), "revision_id": draft["revision_id"], "detail_level": "full",
     }, key="familiar-preview", model=PreviewRequest)["data"]
     assert "Новые карточки: 2" in preview["canonical_text"]
-    assert "Уже есть в каталоге → Синтетическое упражнение из каталога: найдено; будет отмечено знакомым." in preview["canonical_text"]
+    assert "«Уже есть в каталоге» → «Синтетическое упражнение из каталога»" in preview["canonical_text"]
     assert "Не будут записаны до уточнения: Неоднозначное синтетическое упражнение." in preview["canonical_text"]
     assert preview["canonical_text"].count("Тестовая общая группа") == 1
     assert "служебные ID" not in preview["canonical_text"]
+    card_detail = post("/api/v1/commands/previews", {
+        "context": context("card-detail"), "revision_id": draft["revision_id"],
+        "detail_level": "exercise", "entry_name": "Упражнение 1",
+    }, key="familiar-card-detail", model=PreviewRequest)["data"]
+    assert card_detail["revision_id"] == draft["revision_id"]
+    assert card_detail["complete"] is False
+    assert card_detail["canonical_payload"] == preview["canonical_payload"]
+    assert "Синтетическое пакетное упражнение 1" in card_detail["canonical_text"]
+    groups_detail = post("/api/v1/commands/previews", {
+        "context": context("groups-detail"), "revision_id": draft["revision_id"],
+        "detail_level": "groups",
+    }, key="familiar-groups-detail", model=PreviewRequest)["data"]
+    assert groups_detail["revision_id"] == draft["revision_id"]
+    assert groups_detail["complete"] is False
+    assert groups_detail["canonical_payload"] == preview["canonical_payload"]
+    assert "Тестовая общая группа" in groups_detail["canonical_text"]
+    detail_shown = post(f"/api/v1/commands/previews/{card_detail['preview_id']}/shown", {
+        "context": context("detail-shown"), "revision_id": draft["revision_id"],
+        "preview_digest": card_detail["digest"], "shown_message_id": "detail-shown",
+        "displayed_text_digest": hashlib.sha256(card_detail["canonical_text"].encode()).hexdigest(),
+        "cross_dialog": False,
+    }, key="familiar-detail-shown", model=PreviewShownRequest, expected=400)
+    assert detail_shown["error"]["code"] == "incomplete_preview"
+    revised = post("/api/v1/commands/familiar-exercise-batches", {
+        **body, "draft_id": draft["draft_id"],
+        "expected_revision_id": draft["revision_id"],
+        "items": [{**item, "source_name": "Исправленное упражнение 1"} if index == 0 else item
+                  for index, item in enumerate(items)],
+    }, key="familiar-revised", model=FamiliarExerciseBatchDraftRequest)["data"]
+    assert revised["draft_id"] == draft["draft_id"]
+    assert revised["revision_no"] == draft["revision_no"] + 1
+    old_shown = post(f"/api/v1/commands/previews/{preview['preview_id']}/shown", {
+        "context": context("old-shown"), "revision_id": draft["revision_id"],
+        "preview_digest": preview["digest"], "shown_message_id": "old-shown",
+        "displayed_text_digest": hashlib.sha256(preview["canonical_text"].encode()).hexdigest(),
+        "cross_dialog": False,
+    }, key="familiar-old-shown", model=PreviewShownRequest, expected=409)
+    assert old_shown["error"]["code"] == "stale_preview"
+    draft = revised
+    preview = post("/api/v1/commands/previews", {
+        "context": context("revised-preview"), "revision_id": draft["revision_id"],
+        "detail_level": "full",
+    }, key="familiar-revised-preview", model=PreviewRequest)["data"]
+    assert "Исправленное упражнение 1" in preview["canonical_text"]
     post(f"/api/v1/commands/previews/{preview['preview_id']}/shown", {
         "context": context("shown"), "revision_id": draft["revision_id"],
         "preview_digest": preview["digest"], "shown_message_id": "shown",

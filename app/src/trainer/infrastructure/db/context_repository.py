@@ -4527,6 +4527,8 @@ class ContextRepository:
         detail_level = payload.get("detail_level", "full")
         if detail_level in {"inventory", "details"} and row["intent_type"] != "onboarding":
             raise ContextRepositoryError("validation_error", "section details are available only for onboarding", 422)
+        if detail_level in {"exercise", "groups"} and row["intent_type"] != "familiar_exercise_batch":
+            raise ContextRepositoryError("validation_error", "exercise details are available only for familiar batches", 422)
         dependencies = [
             {
                 "dependency_type": item["dependency_type"],
@@ -4551,7 +4553,10 @@ class ContextRepository:
         # binds the readable text and the exact dependency snapshot; exercise
         # previews need not print internal dependency identifiers.
         presentation_payload = {**canonical_payload, "dependencies": dependencies}
-        canonical_text = self._render_preview(presentation_payload, detail_level=detail_level)
+        canonical_text = self._render_preview(
+            presentation_payload, detail_level=detail_level,
+            entry_name=payload.get("entry_name"),
+        )
         gaps = canonical_payload.get("gaps", [])
         if canonical_payload.get("intent") == "workout_report":
             is_complete = detail_level == "full" and all(
@@ -4567,6 +4572,7 @@ class ContextRepository:
                 "dependencies": dependencies,
                 "confirmation_kind": row["confirmation_kind"],
                 "detail_level": detail_level,
+                **({"entry_name": payload["entry_name"]} if payload.get("entry_name") else {}),
             }
         )
         preview_id = uuid4()
@@ -4653,6 +4659,8 @@ class ContextRepository:
             raise ContextRepositoryError("incomplete_preview", "preview must be full", 400)
         if row["intent_type"] == "onboarding" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "familiar_exercise_batch" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
         if (
             row["state"] != "open"
             or row["expires_at"] <= datetime.now(UTC)
@@ -4840,6 +4848,8 @@ class ContextRepository:
             raise ContextRepositoryError("not_found", "preview not found", 404)
         if row["intent_type"] == "onboarding" and row["detail_level"] == "full" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
         if row["intent_type"] == "program":
             error = ContextRepositoryError(
                 "confirmation_not_supported", "technical program draft cannot be confirmed", 409
@@ -9066,7 +9076,10 @@ class ContextRepository:
         return "Полное описание изменений"
 
     @staticmethod
-    def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
+    def _render_preview(
+        payload: dict[str, Any], *, detail_level: str = "full",
+        entry_name: str | None = None,
+    ) -> str:
         if all(key in payload for key in ("profile", "goals", "places", "equipment", "familiar_exercises")):
             if detail_level in {"full", "short"}:
                 return ContextRepository._render_onboarding_overview(payload)
@@ -9083,7 +9096,9 @@ class ContextRepository:
         if payload.get("intent") == "familiar_batch":
             from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
 
-            return FamiliarBatchRepository.render(payload)
+            return FamiliarBatchRepository.render(
+                payload, detail_level=detail_level, entry_name=entry_name
+            )
         if isinstance(payload.get("exercise"), dict) and "resolved_muscle_roles" in payload:
             return ContextRepository._render_exercise_preview(payload)
         labels = ContextRepository._preview_known_labels(payload)
