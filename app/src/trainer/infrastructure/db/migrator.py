@@ -141,6 +141,31 @@ MIGRATIONS = (
         "74ecb287331236e9c39b53d13609175d7d6c38c5df953b8ccf7ded43929a919a",
         "0022_profile_familiar_exercises.py",
     ),
+    MigrationSpec(
+        "0023_familiar_exercise_batch",
+        "d6f884130b50a2f750ab92f02ea7d5944fa92ca09d4ccbb239a73267abca319d",
+        "0023_familiar_exercise_batch.py",
+    ),
+    MigrationSpec(
+        "0024_parallel_bars_equipment",
+        "6df12136df187dd34a41252318f3fd9468a009c691af89c10da07905da998bf1",
+        "0024_parallel_bars_equipment.py",
+    ),
+    MigrationSpec(
+        "0025_strength_goal_type",
+        "ddfe1024d95cc4b558558f63e031f64e73969f069b081c2c85fe5e2e20573b6d",
+        "0025_strength_goal_type.py",
+    ),
+    MigrationSpec(
+        "0026_cardio_exercise_category",
+        "b3d559f62213c86a84c14898ea1660c7fdb547fde2919949e0a3a004b4322dea",
+        "0026_cardio_exercise_category.py",
+    ),
+    MigrationSpec(
+        "0027_workout_import_batch",
+        "8bf04dd86bc9d83c1a2c7e471deb09bcde39b36b713f4a90aa162f6d90e429eb",
+        "0027_workout_import_batch.py",
+    ),
 )
 
 

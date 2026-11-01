@@ -491,6 +491,7 @@ class WorkoutRepository:
         }
         typed = {
             "intent": "workout_report",
+            "context": payload["context"],
             "profile_id": str(row["profile_id"]),
             "session_id": str(session_id),
             "session_revision_id": str(revision_id),
@@ -1622,6 +1623,8 @@ class WorkoutRepository:
         result_id: UUID,
         changes: list[dict[str, Any]],
         now: datetime,
+        *,
+        create_record_candidates: bool = True,
     ) -> list[UUID]:
         report = typed["report"]
         session_id = UUID(typed["session_id"])
@@ -1915,15 +1918,16 @@ class WorkoutRepository:
                 now=now,
             )
         after = self._load_saved_tree(session_id, revision_id)
-        self._create_record_candidates(
-            session_id=session_id,
-            revision_id=revision_id,
-            profile_id=profile_id,
-            confirmation_id=confirmation_id,
-            now=now,
-            changes=changes,
-            result_id=result_id,
-        )
+        if create_record_candidates:
+            self._create_record_candidates(
+                session_id=session_id,
+                revision_id=revision_id,
+                profile_id=profile_id,
+                confirmation_id=confirmation_id,
+                now=now,
+                changes=changes,
+                result_id=result_id,
+            )
         before = correction["before"] if correction else None
         self.repo._insert_change(
             changes[0],

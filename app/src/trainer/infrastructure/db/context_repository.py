@@ -29,10 +29,14 @@ from trainer.domain.records import canonical_condition_key, strictly_improves
 
 
 class ContextRepositoryError(RuntimeError):
-    def __init__(self, code: str, message: str, status_code: int = 400) -> None:
+    def __init__(
+        self, code: str, message: str, status_code: int = 400,
+        *, field_errors: list[dict[str, str]] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
         self.status_code = status_code
+        self.field_errors = field_errors or []
         self.required_next_action: str | None = {
             "source_draft_not_open": "prepare_program_draft",
             "source_revision_not_current": "read_current_draft_revision",
@@ -1129,6 +1133,16 @@ class ContextRepository:
             key=key,
             correlation_id=correlation_id,
             causation_id=causation_id,
+        )
+
+    def create_workout_import_batch_draft(
+        self, *, payload: dict[str, Any], key: str, correlation_id: UUID,
+        causation_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+        return WorkoutImportBatchRepository(self).create(
+            payload=payload, key=key, correlation_id=correlation_id, causation_id=causation_id
         )
 
     def get_workout_history(self, *, payload: dict[str, Any]) -> dict[str, Any]:
@@ -2607,6 +2621,20 @@ class ContextRepository:
                         }
                     )
                     seen.add(key)
+        import_payload = self.session.execute(text("""
+            SELECT dr.typed_payload FROM trainer.workout_session_revisions r
+            JOIN trainer.confirmations c ON c.confirmation_id=r.confirmation_id
+            JOIN trainer.draft_revisions dr ON dr.draft_revision_id=c.draft_revision_id
+            JOIN trainer.drafts d ON d.draft_id=dr.draft_id
+            WHERE r.session_revision_id=:revision AND d.intent_type='workout_import_batch'
+        """), {"revision": revision_id}).scalar_one_or_none()
+        if import_payload:
+            matching = [item for item in import_payload["entries"]
+                        if item.get("report_draft", {}).get("session_revision_id") == str(revision_id)]
+            if len(matching) != 1:
+                raise ContextRepositoryError("inconsistent_domain_state", "import source is unavailable", 500)
+            provenance.extend({"kind": "historical_import_source", **source}
+                              for source in matching[0]["fact_sources"])
         return provenance
 
     def create_plan_lifecycle_draft(
@@ -3366,6 +3394,7 @@ class ContextRepository:
     ) -> dict[str, Any]:
         body = materialize_onboarding_defaults(payload)
         validate_onboarding(body)
+        self._validate_onboarding_catalog_refs(body)
         operation_id, replay = self._reserve("CMD-01", key, payload["request_digest"])
         if replay is not None:
             self._audit_replay(operation_id, "CMD-01", correlation_id, causation_id, key, replay)
@@ -3374,8 +3403,36 @@ class ContextRepository:
             text("SELECT 1 FROM trainer.profiles WHERE archived_at IS NULL")
         ).first():
             raise ContextRepositoryError("revision_conflict", "active profile already exists", 409)
+        now = datetime.now(UTC)
+        target_draft = payload.get("draft_id")
+        target_revision = payload.get("expected_revision_id")
+        previous = None
+        if target_draft is not None:
+            previous = self.session.execute(
+                text("""
+                    SELECT d.draft_id,d.latest_revision_id,d.state,d.expires_at,
+                           r.revision_no,r.typed_payload
+                    FROM trainer.drafts d
+                    JOIN trainer.draft_revisions r ON r.draft_revision_id=d.latest_revision_id
+                    WHERE d.draft_id=:draft AND d.intent_type='onboarding'
+                    FOR UPDATE OF d
+                """),
+                {"draft": target_draft},
+            ).mappings().one_or_none()
+            if (
+                previous is None or previous["state"] != "open"
+                or previous["expires_at"] <= now
+                or str(previous["latest_revision_id"]) != str(target_revision)
+                or previous["typed_payload"]["context"]["conversation_id"]
+                != body["context"]["conversation_id"]
+            ):
+                raise ContextRepositoryError("stale_preview", "onboarding draft revision is no longer current", 409)
         body.pop("request_digest", None)
-        body["profile_id"] = str(uuid4())
+        body.pop("draft_id", None)
+        body.pop("expected_revision_id", None)
+        body["profile_id"] = (
+            previous["typed_payload"]["profile_id"] if previous else str(uuid4())
+        )
         for goal in body["goals"]:
             goal["goal_id"] = goal.get("goal_id") or str(uuid4())
         familiarity_refs: list[tuple[UUID, UUID]] = []
@@ -3415,10 +3472,25 @@ class ContextRepository:
             familiarity_refs.append((exercise_id, exercise_revision_id))
         body["change_plan"] = self._new_onboarding_change_plan(body)
         validate_onboarding(body)
-        draft_id, revision_id = uuid4(), uuid4()
+        draft_id = UUID(str(previous["draft_id"])) if previous else uuid4()
+        revision_id = uuid4()
+        revision_no = previous["revision_no"] + 1 if previous else 1
         digest = digest_payload(body)
-        now = datetime.now(UTC)
-        self.session.execute(
+        if previous is None:
+            # A new full package replaces every still-open onboarding proposal;
+            # an older preview must never remain confirmable after a correction.
+            self.session.execute(text("""
+                UPDATE trainer.draft_revisions SET trust_state='superseded'
+                WHERE draft_id IN (
+                    SELECT draft_id FROM trainer.drafts
+                    WHERE intent_type='onboarding' AND state='open'
+                ) AND trust_state='shown'
+            """))
+            self.session.execute(text("""
+                UPDATE trainer.drafts SET state='cancelled',cancelled_at=:now
+                WHERE intent_type='onboarding' AND state='open'
+            """), {"now": now})
+            self.session.execute(
             text("""
             INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,latest_revision_id,
                 expires_at,created_at) VALUES (:draft,'onboarding',NULL,'open',:revision,:expires,:now)
@@ -3429,21 +3501,35 @@ class ContextRepository:
                 "expires": now + timedelta(hours=24),
                 "now": now,
             },
-        )
+            )
+        else:
+            self.session.execute(
+                text("""
+                    UPDATE trainer.draft_revisions SET trust_state='superseded'
+                    WHERE draft_revision_id=:previous AND trust_state='shown'
+                """),
+                {"previous": previous["latest_revision_id"]},
+            )
         self.session.execute(
             text("""
             INSERT INTO trainer.draft_revisions(draft_revision_id,draft_id,revision_no,typed_payload,
                 content_digest,trust_state,confirmation_kind,created_at)
-            VALUES (:revision,:draft,1,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
+            VALUES (:revision,:draft,:number,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
         """),
             {
                 "revision": revision_id,
                 "draft": draft_id,
+                "number": revision_no,
                 "payload": json.dumps(body),
                 "digest": digest,
                 "now": now,
             },
         )
+        if previous is not None:
+            self.session.execute(
+                text("UPDATE trainer.drafts SET latest_revision_id=:revision WHERE draft_id=:draft"),
+                {"draft": draft_id, "revision": revision_id},
+            )
         familiarity_dependencies: list[dict[str, Any]] = []
         for exercise_id, exercise_revision_id in familiarity_refs:
             familiarity_dependencies.append(
@@ -3459,12 +3545,12 @@ class ContextRepository:
         response = {
             "draft_id": str(draft_id),
             "revision_id": str(revision_id),
-            "revision_no": 1,
+            "revision_no": revision_no,
             "content_digest": digest,
             "dependencies": familiarity_dependencies,
             "gaps": [],
             "preview_candidate": {
-                "summary": "Полный исходный контекст готов к предпросмотру",
+                "summary": "Краткий обзор первого знакомства готов к предпросмотру",
                 "confirmation_kind": "normal",
                 "complete": True,
             },
@@ -3489,6 +3575,7 @@ class ContextRepository:
         causation_id: UUID | None = None,
     ) -> dict[str, Any]:
         validate_goal(payload["goal"])
+        self._validate_goal_catalog_refs(payload["goal"], path="goal")
         operation_id, replay = self._reserve("CMD-02", key, payload["request_digest"])
         if replay is not None:
             self._audit_replay(operation_id, "CMD-02", correlation_id, causation_id, key, replay)
@@ -3899,6 +3986,17 @@ class ContextRepository:
             ],
         )
         return response
+
+    def create_familiar_exercise_batch_draft(
+        self, *, payload: dict[str, Any], key: str,
+        correlation_id: UUID, causation_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
+
+        return FamiliarBatchRepository(self).create(
+            payload=payload, key=key, correlation_id=correlation_id,
+            causation_id=causation_id,
+        )
 
     def create_program_draft(
         self,
@@ -4434,7 +4532,7 @@ class ContextRepository:
         row = (
             self.session.execute(
                 text("""
-            SELECT dr.draft_revision_id,dr.typed_payload,dr.content_digest,dr.confirmation_kind,d.state,d.expires_at
+            SELECT dr.draft_revision_id,dr.typed_payload,dr.content_digest,dr.confirmation_kind,d.state,d.expires_at,d.intent_type
             FROM trainer.draft_revisions dr JOIN trainer.drafts d ON d.draft_id=dr.draft_id
             WHERE dr.draft_revision_id=:revision AND d.latest_revision_id=dr.draft_revision_id
         """),
@@ -4448,9 +4546,15 @@ class ContextRepository:
         if row["state"] != "open" or row["expires_at"] <= datetime.now(UTC):
             raise ContextRepositoryError("already_superseded", "draft is not open", 409)
         canonical_payload = dict(row["typed_payload"])
-        # A short request may render readable text, but it must remain
-        # incomplete and cannot authorize a shown/confirm transition.
+        # Only the full, confirmation-bound view may authorize a shown/confirm
+        # transition. Section details stay tied to this draft revision.
         detail_level = payload.get("detail_level", "full")
+        if detail_level in {"inventory", "details"} and row["intent_type"] != "onboarding":
+            raise ContextRepositoryError("validation_error", "section details are available only for onboarding", 422)
+        if detail_level in {"exercise", "groups"} and row["intent_type"] != "familiar_exercise_batch":
+            raise ContextRepositoryError("validation_error", "exercise details are available only for familiar batches", 422)
+        if detail_level == "workout" and row["intent_type"] != "workout_import_batch":
+            raise ContextRepositoryError("validation_error", "workout details are available only for import batches", 422)
         dependencies = [
             {
                 "dependency_type": item["dependency_type"],
@@ -4471,11 +4575,47 @@ class ContextRepository:
                 {"revision": row["draft_revision_id"]},
             ).mappings()
         ]
-        # Keep the persisted canonical payload untouched, but render the exact
-        # dependency snapshot in the user-visible text so shown/confirm binds to
-        # both domain content and its source basis.
+        # Keep the persisted canonical payload untouched. The preview digest
+        # binds the readable text and the exact dependency snapshot; exercise
+        # previews need not print internal dependency identifiers.
         presentation_payload = {**canonical_payload, "dependencies": dependencies}
-        canonical_text = self._render_preview(presentation_payload, detail_level=detail_level)
+        if canonical_payload.get("intent") == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            batch = WorkoutImportBatchRepository(self)
+            batch.validate_children(canonical_payload)
+            if detail_level == "workout":
+                matches = [item for item in canonical_payload["entries"]
+                           if item["entry_key"] == payload["entry_key"]
+                           and item["decision"] in {"create", "correct"}]
+                if len(matches) != 1:
+                    raise ContextRepositoryError("validation_error", "select one included workout", 422)
+                selected = matches[0]
+                canonical_text = self._render_workout_report_preview(selected["report_draft"])
+                correction = selected["report_draft"].get("correction")
+                if correction:
+                    before = correction["before"]
+                    before_exercises = WorkoutImportBatchRepository(self)._exercise_summaries(before)
+                    canonical_text = (
+                        "Исправить существующую тренировку.\n"
+                        f"Было: {before['local_start_date']}; упражнения: "
+                        + (", ".join(before_exercises) if before_exercises else "не указаны")
+                        + f".\nПричина исправления: {correction['reason']}.\nСтанет:\n"
+                        + canonical_text
+                    )
+                canonical_text += "\nИсточники указанных фактов:\n" + "\n".join(
+                    f"• {source['field_path']}: {source['source_locator']} — {source['source_excerpt']}"
+                    for source in selected["fact_sources"]
+                )
+            else:
+                canonical_text = batch.render(canonical_payload)
+        elif canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction"):
+            canonical_text = self._render_workout_report_preview(presentation_payload)
+        else:
+            canonical_text = self._render_preview(
+                presentation_payload, detail_level=detail_level,
+                entry_name=payload.get("entry_name"),
+            )
         gaps = canonical_payload.get("gaps", [])
         if canonical_payload.get("intent") == "workout_report":
             is_complete = detail_level == "full" and all(
@@ -4491,6 +4631,8 @@ class ContextRepository:
                 "dependencies": dependencies,
                 "confirmation_kind": row["confirmation_kind"],
                 "detail_level": detail_level,
+                **({"entry_name": payload["entry_name"]} if payload.get("entry_name") else {}),
+                **({"entry_key": payload["entry_key"]} if payload.get("entry_key") else {}),
             }
         )
         preview_id = uuid4()
@@ -4560,7 +4702,8 @@ class ContextRepository:
         row = (
             self.session.execute(
                 text("""
-            SELECT p.*,d.expires_at,d.state,d.latest_revision_id FROM trainer.previews p
+            SELECT p.*,d.expires_at,d.state,d.latest_revision_id,d.intent_type,
+                   dr.typed_payload FROM trainer.previews p
             JOIN trainer.draft_revisions dr ON dr.draft_revision_id=p.draft_revision_id
             JOIN trainer.drafts d ON d.draft_id=dr.draft_id
                 WHERE p.preview_id=:id FOR UPDATE OF d
@@ -4574,6 +4717,19 @@ class ContextRepository:
             raise ContextRepositoryError("not_found", "preview not found", 404)
         if row["detail_level"] != "full":
             raise ContextRepositoryError("incomplete_preview", "preview must be full", 400)
+        if row["intent_type"] == "onboarding" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "familiar_exercise_batch" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            batch = WorkoutImportBatchRepository(self)
+            batch.validate_children(dict(row["typed_payload"]))
+            if row["canonical_text"] != batch.render(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
+        if row["intent_type"] == "workout_report" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if (
             row["state"] != "open"
             or row["expires_at"] <= datetime.now(UTC)
@@ -4759,6 +4915,19 @@ class ContextRepository:
         )
         if row is None:
             raise ContextRepositoryError("not_found", "preview not found", 404)
+        if row["intent_type"] == "onboarding" and row["detail_level"] == "full" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            batch = WorkoutImportBatchRepository(self)
+            batch.validate_children(dict(row["typed_payload"]))
+            if row["detail_level"] == "full" and row["canonical_text"] != batch.render(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
+        if row["intent_type"] == "workout_report" and row["detail_level"] == "full" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if row["intent_type"] == "program":
             error = ContextRepositoryError(
                 "confirmation_not_supported", "technical program draft cannot be confirmed", 409
@@ -5006,7 +5175,20 @@ class ContextRepository:
                 "now": now,
             },
         )
-        if "plan_lifecycle" in typed:
+        if typed.get("intent") == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            planned_changes = [dict(item) for item in changes]
+            invalidated = WorkoutImportBatchRepository(self).commit(
+                typed, confirmation_id, commit_result_id, changes, now
+            )
+            if changes != planned_changes:
+                raise ContextRepositoryError("inconsistent_domain_state", "import changes differ from preview", 500)
+            if sorted(str(item) for item in invalidated) != sorted(
+                str(item["object_id"]) for item in expected_invalidated_refs
+            ):
+                raise ContextRepositoryError("stale_preview", "correction effects changed", 409)
+        elif "plan_lifecycle" in typed:
             self._commit_plan_lifecycle(typed, confirmation_id, commit_result_id, changes, now)
         elif "publication_source" in typed:
             self._commit_program(typed, confirmation_id, commit_result_id, changes, now)
@@ -5033,6 +5215,12 @@ class ContextRepository:
             from trainer.infrastructure.db.measurements import MeasurementRepository
 
             MeasurementRepository(self).commit(
+                typed, confirmation_id, commit_result_id, changes, now
+            )
+        elif typed.get("intent") == "familiar_batch":
+            from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
+
+            FamiliarBatchRepository(self).commit(
                 typed, confirmation_id, commit_result_id, changes, now
             )
         elif "profile_id" in typed:
@@ -6418,8 +6606,22 @@ class ContextRepository:
         return result
 
     def _assert_catalog_codes(self, exercise: dict[str, Any]) -> None:
+        categories = [
+            row["code"] for row in self.session.execute(
+                text("SELECT code FROM trainer.exercise_category_catalog WHERE archived_at IS NULL ORDER BY code")
+            ).mappings()
+        ]
+        if exercise["category_code"] not in categories:
+            expected = ", ".join(categories) if categories else "no active categories"
+            raise ContextRepositoryError(
+                "validation_error", "unknown exercise category", 422,
+                field_errors=[{
+                    "path": "exercise.category_code",
+                    "code": "unsupported_category_code",
+                    "message_safe": f"Use one of: {expected}.",
+                }],
+            )
         checks = [
-            ("exercise_category_catalog", [exercise["category_code"]]),
             ("exercise_status_catalog", [exercise["status_code"]]),
             ("metric_kind_catalog", [item["metric_kind"] for item in exercise["measurements"]]),
             ("unit_family_catalog", [item["unit_family"] for item in exercise["measurements"]]),
@@ -6750,9 +6952,19 @@ class ContextRepository:
                     raise ContextRepositoryError("stale_preview", "catalog rules changed", 409)
                 continue
             if dep["dependency_type"] == "active_exercise_name":
-                active_name_revision = self._active_name_revision(
-                    typed["exercise"]["normalized_name"]
-                )
+                if typed.get("intent") == "familiar_batch":
+                    normalized_names = [
+                        entry["exercise_draft"]["exercise"]["normalized_name"]
+                        for entry in typed["entries"] if entry["action"] == "create"
+                    ]
+                    names = [name for name in normalized_names
+                             if uuid5(NAMESPACE_URL, f"trainer:exercise-name:{name}") == dep["dependency_object_id"]]
+                    if len(names) != 1:
+                        raise ContextRepositoryError("stale_preview", "exercise name dependency is ambiguous", 409)
+                    normalized_name = names[0]
+                else:
+                    normalized_name = typed["exercise"]["normalized_name"]
+                active_name_revision = self._active_name_revision(normalized_name)
                 if (
                     active_name_revision != dep["dependency_revision_id"]
                     or digest_payload({"revision_id": str(active_name_revision)})
@@ -7502,6 +7714,57 @@ class ContextRepository:
                 },
             )
 
+    def _require_catalog_code(
+        self, *, table: str, value: str | None, path: str, error_code: str,
+        message: str,
+    ) -> None:
+        if value is None:
+            return
+        # Table names are selected here, never supplied by a request.
+        if table not in {"goal_type_catalog", "unit_catalog", "place_type_catalog", "equipment_type_catalog"}:
+            raise ValueError("unsupported catalog lookup")
+        found = self.session.execute(
+            text(f"SELECT 1 FROM trainer.{table} WHERE code=:code AND archived_at IS NULL"),
+            {"code": value},
+        ).scalar_one_or_none()
+        if found is None:
+            raise DomainValidationError(
+                message,
+                field_errors=[{"path": path, "code": error_code, "message_safe": message}],
+            )
+
+    def _validate_goal_catalog_refs(self, goal: dict[str, Any], *, path: str) -> None:
+        self._require_catalog_code(
+            table="goal_type_catalog", value=goal.get("goal_type"),
+            path=f"{path}.goal_type", error_code="unsupported_goal_type",
+            message="Use performance or strength for the goal type.",
+        )
+        self._require_catalog_code(
+            table="unit_catalog", value=goal.get("unit_code"),
+            path=f"{path}.unit_code", error_code="unsupported_unit_code",
+            message=(
+                "Use kilogram for kilograms; kg is not a unit code."
+                if goal.get("unit_code") == "kg"
+                else "Use a supported unit code, such as kilogram or repetition."
+            ),
+        )
+
+    def _validate_onboarding_catalog_refs(self, typed: dict[str, Any]) -> None:
+        for index, goal in enumerate(typed["goals"]):
+            self._validate_goal_catalog_refs(goal, path=f"goals[{index}]")
+        for index, place in enumerate(typed["places"]):
+            self._require_catalog_code(
+                table="place_type_catalog", value=place.get("place_type"),
+                path=f"places[{index}].place_type", error_code="unsupported_place_type",
+                message="Use a supported place type such as home_gym.",
+            )
+        for index, item in enumerate(typed["equipment"]):
+            self._require_catalog_code(
+                table="equipment_type_catalog", value=item.get("equipment_type"),
+                path=f"equipment[{index}].equipment_type", error_code="unsupported_equipment_type",
+                message="Use a supported equipment type from the trainer catalog.",
+            )
+
     @staticmethod
     def _new_onboarding_change_plan(typed: dict[str, Any]) -> list[dict[str, Any]]:
         result = [
@@ -7576,6 +7839,10 @@ class ContextRepository:
         changes: list[dict[str, Any]],
         now: datetime,
     ) -> None:
+        # Old drafts may predate stricter goal validation. Reject them with a
+        # field error before attempting any domain insert.
+        validate_onboarding(typed)
+        self._validate_onboarding_catalog_refs(typed)
         profile_id = UUID(typed["profile_id"])
         profile_revision = UUID(changes[0]["revision_id"])
         self.session.execute(
@@ -7728,6 +7995,8 @@ class ContextRepository:
         now: datetime,
     ) -> None:
         goal, intent, change = typed["goal"], typed["intent"], changes[0]
+        validate_goal(goal)
+        self._validate_goal_catalog_refs(goal, path="goal")
         if goal.get("parent_goal_id") is not None:
             self._assert_acyclic_parent(
                 UUID(str(goal["goal_id"])), UUID(str(goal["parent_goal_id"]))
@@ -8022,11 +8291,13 @@ class ContextRepository:
             "birth_date": "Дата рождения",
             "blocks": "Блоки тренировки",
             "brand": "Бренд",
+            "bar_sleeve_diameter_mm": "Диаметр посадочной части грифа, мм",
             "canonical_name": "Основное название",
             "category_code": "Категория",
             "caveats": "Ограничения и оговорки",
             "comment": "Комментарий",
             "condition": "Состояние",
+            "characteristics": "Характеристики",
             "context": "Контекст",
             "condition_readable": "Условия сравнения",
             "calculation_effects": "Последствия для расчётов",
@@ -8070,12 +8341,15 @@ class ContextRepository:
             "loads": "Компоненты нагрузки",
             "locale": "Язык",
             "mass": "Масса",
+            "mass_per_item_kg": "Масса одного предмета, кг",
+            "maker": "Производитель",
             "message_safe": "Описание пробела",
             "measurement_change": "Изменение замеров тела",
             "measurement_kind": "Вид замера",
             "metric_kind": "Показатель",
             "measurements": "Измерения",
             "method": "Метод измерения",
+            "model": "Модель",
             "muscle_roles": "Роли групп мышц",
             "name": "Название",
             "notes": "Примечание",
@@ -8084,6 +8358,7 @@ class ContextRepository:
             "partial_reps": "Частичные повторения",
             "place": "Место занятий",
             "place_type": "Тип места",
+            "plate_bore_diameter_mm": "Диаметр отверстия диска, мм",
             "places": "Обычные места занятий",
             "path": "Поле",
             "position": "Позиция",
@@ -8094,6 +8369,7 @@ class ContextRepository:
             "program_name": "Программа",
             "publication_state": "Состояние публикации",
             "quantity": "Количество",
+            "quantity_unit_code": "Единица количества",
             "reason": "Причина изменения",
             "requiredness": "Обязательность показателя",
             "role": "Роль",
@@ -8486,6 +8762,8 @@ class ContextRepository:
             "equipment_item": "предмет инвентаря",
             "equipment_availability": "доступность оборудования",
             "exercise": "упражнение",
+            "exercise_catalog_rules": "правила каталога упражнений",
+            "active_exercise_name": "название упражнения в каталоге",
             "goal": "цель",
             "knowledge_status_revision": "статус научного вывода",
             "muscle_group": "группа мышц",
@@ -8657,6 +8935,10 @@ class ContextRepository:
         lines = [f"{'  ' * depth}Основания и зависимости:"]
         count = 0
         reason_labels = {
+            "current exercise": "текущая редакция упражнения",
+            "existing muscle group": "существующая группа мышц",
+            "catalog and normalization rules": "правила каталога и сопоставления названий упражнений",
+            "active normalized exercise name": "проверка уникальности названия среди активных упражнений",
             "exact workout plan revision for corrected workout": "точная редакция плана исправляемой тренировки",
             "profile owner of corrected workout": "профиль-владелец исправляемой тренировки",
             "current recommendation calculation": "текущий расчёт, использованный рекомендацией",
@@ -8749,7 +9031,10 @@ class ContextRepository:
             "leave_unknown": "оставить неизвестным",
         }
         by_field = {
-            "category_code": {"strength": "силовое упражнение"},
+            "category_code": {
+                "strength": "силовое упражнение",
+                "cardio": "кардиоупражнение",
+            },
             "alternative_group": {"external_load": "внешнее отягощение"},
             "kind": {
                 "existing": "существующая группа мышц",
@@ -8764,6 +9049,7 @@ class ContextRepository:
                 "weight_plate": "диск для штанги",
                 "bench": "скамья",
                 "pull_up_bar": "турник",
+                "parallel_bars": "брусья",
                 "resistance_band": "резиновая лента",
                 "hyperextension_bench": "скамья для гиперэкстензии",
                 "push_up_handles": "упоры для отжиманий",
@@ -8803,6 +9089,12 @@ class ContextRepository:
                 "second": "секунды",
                 "kg": "килограммы",
             },
+            "quantity_unit_code": {
+                "piece": "штука",
+                "pair": "пара",
+                "set": "комплект",
+            },
+            "condition": {"usable": "пригодно к использованию", "unusable": "непригодно к использованию"},
             "goal_type": {
                 "strength": "силовая цель",
                 "endurance": "цель на выносливость",
@@ -8810,6 +9102,7 @@ class ContextRepository:
             },
             "place_type": {
                 "home": "дом",
+                "home_gym": "домашний спортзал",
                 "gym": "спортивный зал",
                 "outdoor": "улица",
             },
@@ -8874,8 +9167,31 @@ class ContextRepository:
         return "Полное описание изменений"
 
     @staticmethod
-    def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
-        del detail_level  # Persisted/confirmable previews are always rendered in full.
+    def _render_preview(
+        payload: dict[str, Any], *, detail_level: str = "full",
+        entry_name: str | None = None,
+    ) -> str:
+        if all(key in payload for key in ("profile", "goals", "places", "equipment", "familiar_exercises")):
+            if detail_level in {"full", "short"}:
+                return ContextRepository._render_onboarding_overview(payload)
+            if detail_level == "inventory":
+                return ContextRepository._render_onboarding_inventory(payload)
+            if detail_level == "details":
+                labels = ContextRepository._preview_known_labels(payload)
+                subject = {
+                    key: payload[key]
+                    for key in ("profile", "goals", "places", "equipment", "familiar_exercises")
+                }
+                lines = ContextRepository._preview_text(subject, root=payload, known_labels=labels)
+                return "Подробности первого знакомства\n" + "\n".join(lines)
+        if payload.get("intent") == "familiar_batch":
+            from trainer.infrastructure.db.familiar_batch import FamiliarBatchRepository
+
+            return FamiliarBatchRepository.render(
+                payload, detail_level=detail_level, entry_name=entry_name
+            )
+        if isinstance(payload.get("exercise"), dict) and "resolved_muscle_roles" in payload:
+            return ContextRepository._render_exercise_preview(payload)
         labels = ContextRepository._preview_known_labels(payload)
         lines = ContextRepository._preview_text(payload, root=payload, known_labels=labels)
         if not lines:
@@ -8883,6 +9199,310 @@ class ContextRepository:
                 "incomplete_preview", "preview has no user-readable domain content", 400
             )
         return ContextRepository._preview_heading(payload) + "\n" + "\n".join(lines)
+
+    def _render_workout_report_preview(self, payload: dict[str, Any]) -> str:
+        from trainer.infrastructure.db.workout_preview import render_workout_report
+
+        names: dict[str, str] = {}
+        for block in payload["report"]["blocks"]:
+            for exercise in block["exercises"]:
+                revision = str(exercise["exercise_revision_id"])
+                if revision in names:
+                    continue
+                name = self.session.execute(text("""
+                    SELECT canonical_name FROM trainer.exercise_revisions
+                    WHERE exercise_revision_id=:revision AND exercise_id=:exercise
+                """), {
+                    "revision": UUID(revision), "exercise": UUID(str(exercise["exercise_id"])),
+                }).scalar_one_or_none()
+                if name is None:
+                    raise ContextRepositoryError(
+                        "inconsistent_domain_state", "exact exercise name is unavailable", 500
+                    )
+                names[revision] = name
+        return render_workout_report(payload, names)
+
+    @staticmethod
+    def _render_onboarding_overview(payload: dict[str, Any]) -> str:
+        """One complete decision summary; the bound payload retains every card."""
+        profile = payload.get("profile")
+        goals = payload.get("goals")
+        places = payload.get("places")
+        equipment = payload.get("equipment")
+        familiar = payload.get("familiar_exercises")
+        if not isinstance(profile, dict) or not all(
+            isinstance(items, list) for items in (goals, places, equipment, familiar)
+        ):
+            raise ContextRepositoryError("incomplete_preview", "onboarding overview is incomplete", 400)
+
+        def required(value: Any, field: str) -> str:
+            if value is None or not str(value).strip():
+                raise ContextRepositoryError("incomplete_preview", f"onboarding {field} is unreadable", 400)
+            return str(value).strip()
+
+        def quantity(item: dict[str, Any]) -> str:
+            count, unit = item.get("quantity"), item.get("quantity_unit_code")
+            if count is None and unit is None:
+                return "количество не указано"
+            if not isinstance(count, int) or count < 1 or unit not in {"piece", "pair", "set"}:
+                raise ContextRepositoryError("incomplete_preview", "equipment quantity is unreadable", 400)
+            if unit == "piece":
+                return f"{count} шт."
+            if unit == "pair":
+                return f"{count} {plural(count, 'пара', 'пары', 'пар')}"
+            return f"{count} {plural(count, 'комплект', 'комплекта', 'комплектов')}"
+
+        def plural(count: int, one: str, few: str, many: str) -> str:
+            return one if count % 10 == 1 and count % 100 != 11 else (
+                few if count % 10 in {2, 3, 4} and count % 100 not in {12, 13, 14} else many
+            )
+
+        def display_date(value: Any) -> str:
+            try:
+                day = date.fromisoformat(required(value, "goal date"))
+            except ValueError as error:
+                raise ContextRepositoryError("incomplete_preview", "goal date is unreadable", 400) from error
+            month = ("января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря")[day.month - 1]
+            return f"{day.day} {month} {day.year} года"
+
+        lines = ["Первое знакомство: пока ничего не сохранено."]
+        lines.append(
+            "После подтверждения будут созданы: 1 профиль, "
+            f"{len(goals)} {plural(len(goals), 'цель', 'цели', 'целей')}, "
+            f"{len(places)} {plural(len(places), 'место', 'места', 'мест')} занятий, "
+            f"{len(equipment)} {plural(len(equipment), 'позиция', 'позиции', 'позиций')} инвентаря; "
+            f"знакомых упражнений — {len(familiar)}."
+        )
+        for index, goal in enumerate(goals, 1):
+            if not isinstance(goal, dict):
+                raise ContextRepositoryError("incomplete_preview", "goal is unreadable", 400)
+            units = {
+                "kilogram": "кг", "kg": "кг", "pound": "фунтов",
+                "repetition": "повт.", "second": "с", "meter": "м",
+                "centimeter": "см", "millimeter": "мм", "inch": "дюймов",
+            }
+            unit_code = goal.get("unit_code")
+            if unit_code is not None and unit_code not in units:
+                raise ContextRepositoryError("incomplete_preview", "goal unit is unreadable", 400)
+            unit = units.get(unit_code, "")
+            name = required(goal.get("name"), "goal name")
+            target = goal.get("target_value")
+            target_date = display_date(goal.get("target_date"))
+            start = goal.get("start_value")
+            target_text = (
+                "целевой результат не указан"
+                if target is None else f"целевой результат {target} {unit}".rstrip()
+            )
+            start_text = (
+                "текущий результат не указан"
+                if start is None else f"текущий результат {start} {unit}".rstrip()
+            )
+            lines.append(f"Цель {index}: «{name}»; {target_text} к {target_date}; {start_text.rstrip('.')}.")
+        usual_id = profile.get("usual_place_id")
+        usual = next(
+            (place.get("name") for place in places if isinstance(place, dict)
+             and str(place.get("place_id")) == str(usual_id)),
+            None,
+        ) if usual_id is not None else None
+        place_names = ", ".join(
+            required(place.get("name"), "place name") for place in places
+            if isinstance(place, dict)
+        )
+        if len([place for place in places if isinstance(place, dict)]) != len(places):
+            raise ContextRepositoryError("incomplete_preview", "place is unreadable", 400)
+        sessions = profile.get("desired_sessions_per_week")
+        lines.append(
+            "Тренировки: "
+            + (f"обычное место «{usual}»" if usual else "обычное место не указано")
+            + (f"; другие места: {place_names}" if place_names and not usual else "")
+            + (f"; {sessions} {plural(sessions, 'раз', 'раза', 'раз')} в неделю" if isinstance(sessions, int) and sessions > 0 else "; частота не указана")
+            + f"; часовой пояс {required(profile.get('timezone'), 'timezone')}."
+        )
+        if profile.get("comment"):
+            lines.append(f"Примечание к профилю: {profile['comment']}")
+        if equipment:
+            groups: dict[str, list[dict[str, Any]]] = {}
+            for item in equipment:
+                if not isinstance(item, dict):
+                    raise ContextRepositoryError("incomplete_preview", "equipment is unreadable", 400)
+                kind = required(item.get("equipment_type"), "equipment type")
+                groups.setdefault(kind, []).append(item)
+            summaries = []
+            for kind, items in sorted(groups.items()):
+                label = ContextRepository._preview_value_label("equipment_type", kind)
+                if label == kind.replace("_", " "):
+                    raise ContextRepositoryError("incomplete_preview", "equipment type is unreadable", 400)
+                if kind == "weight_plate":
+                    values = ", ".join(
+                        quantity(item) + (
+                            f" по {item['characteristics']['mass_per_item_kg']} кг"
+                            if item.get("characteristics", {}).get("mass_per_item_kg") is not None
+                            else " (масса не указана)"
+                        ) for item in items
+                    )
+                else:
+                    values = ", ".join(quantity(item) for item in items)
+                summaries.append(f"{label} — {len(items)} поз. ({values})")
+            lines.append(f"Инвентарь: {len(equipment)} {plural(len(equipment), 'позиция', 'позиции', 'позиций')}. " + "; ".join(summaries) + ".")
+            conditions = {"usable": 0, "unusable": 0, None: 0}
+            for item in equipment:
+                condition = item.get("condition")
+                if condition not in conditions:
+                    raise ContextRepositoryError("incomplete_preview", "equipment condition is unreadable", 400)
+                conditions[condition] += 1
+            lines.append(
+                "Состояние инвентаря: "
+                f"пригодных — {conditions['usable']}, "
+                f"непригодных — {conditions['unusable']}, "
+                f"не указано — {conditions[None]}."
+            )
+            for item in equipment:
+                if item.get("equipment_type") == "push_up_handles":
+                    lines.append(f"Проверьте количество упоров для отжиманий: {quantity(item)}.")
+        else:
+            lines.append("Оборудование: нет.")
+        unknowns = []
+        if any(item.get("equipment_type") == "barbell" and item.get("characteristics", {}).get("mass_per_item_kg") is None for item in equipment):
+            unknowns.append("масса грифа")
+        if any(item.get("equipment_type") == "barbell" and item.get("characteristics", {}).get("bar_sleeve_diameter_mm") is None for item in equipment):
+            unknowns.append("диаметр посадочной части грифа")
+        if any(item.get("equipment_type") == "weight_plate" and item.get("characteristics", {}).get("plate_bore_diameter_mm") is None for item in equipment):
+            unknowns.append("диаметр отверстия дисков; совместимость с грифом не подтверждена")
+        if unknowns:
+            lines.append("Не указано: " + "; ".join(unknowns) + ".")
+        if familiar:
+            names = [required(item.get("name"), "familiar exercise name") for item in familiar if isinstance(item, dict)]
+            if len(names) != len(familiar):
+                raise ContextRepositoryError("incomplete_preview", "familiar exercise is unreadable", 400)
+            lines.append("Знакомые упражнения: " + ", ".join(names) + ".")
+        else:
+            lines.append("Знакомые упражнения пока не добавляются.")
+        lines.append("Можно запросить весь инвентарь или полные подробности этого черновика. Если всё верно, подтвердите сохранение перечисленного пакета.")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_onboarding_inventory(payload: dict[str, Any]) -> str:
+        equipment = payload.get("equipment")
+        if not isinstance(equipment, list):
+            raise ContextRepositoryError("incomplete_preview", "onboarding equipment is unreadable", 400)
+        labels = ContextRepository._preview_known_labels(payload)
+        lines = ContextRepository._preview_text(equipment, key="equipment", root=payload, known_labels=labels)
+        return f"Полный инвентарь этого черновика: {len(equipment)} позиций\n" + "\n".join(lines)
+
+    @staticmethod
+    def _render_exercise_preview(payload: dict[str, Any]) -> str:
+        """Describe the entire exercise decision without exposing transport metadata."""
+        exercise = payload["exercise"]
+        intent = payload.get("intent")
+        resolved = payload["resolved_muscle_roles"]
+        created = payload.get("created_muscle_groups")
+        if intent not in {"create", "correct"} or not isinstance(resolved, list) or not isinstance(created, list):
+            raise ContextRepositoryError("incomplete_preview", "exercise preview is incomplete", 400)
+
+        def required_label(key: str, value: Any) -> str:
+            if not isinstance(value, str) or not value.strip():
+                raise ContextRepositoryError("incomplete_preview", f"exercise {key} is unreadable", 400)
+            return ContextRepository._preview_value_label(key, value.strip())
+
+        if any(
+            not isinstance(group, dict)
+            or not isinstance(group.get("muscle_group_id"), str)
+            or not isinstance(group.get("name"), str)
+            for group in created
+        ):
+            raise ContextRepositoryError("incomplete_preview", "new muscle group is incomplete", 400)
+        created_ids = {group["muscle_group_id"] for group in created}
+        resolved_ids = {
+            item.get("muscle_group", {}).get("muscle_group_id")
+            for item in resolved if isinstance(item, dict) and isinstance(item.get("muscle_group"), dict)
+        }
+        if not created_ids <= resolved_ids:
+            raise ContextRepositoryError("incomplete_preview", "new muscle group has no exercise role", 400)
+
+        def snapshot(card: dict[str, Any], roles: list[dict[str, Any]], *, new_groups: bool) -> list[str]:
+            name = card.get("canonical_name")
+            if not isinstance(name, str) or not name.strip():
+                raise ContextRepositoryError("incomplete_preview", "exercise name is unreadable", 400)
+            if not isinstance(card.get("unilateral"), bool):
+                raise ContextRepositoryError("incomplete_preview", "exercise sidedness is missing", 400)
+            lines = [
+                f"Название: {name.strip()}",
+                f"Категория: {required_label('category_code', card.get('category_code'))}",
+                f"Статус в каталоге: {required_label('status_code', card.get('status_code'))}",
+                f"Одностороннее упражнение: {'да' if card.get('unilateral') is True else 'нет'}",
+            ]
+            measurements = card.get("measurements")
+            requirements = card.get("equipment_requirements")
+            aliases = card.get("aliases")
+            if not all(isinstance(items, list) for items in (measurements, requirements, aliases)):
+                raise ContextRepositoryError("incomplete_preview", "exercise fields are incomplete", 400)
+            lines.append("Измерения:")
+            for item in measurements:
+                lines.append(
+                    f"  • {required_label('metric_kind', item.get('metric_kind'))} — "
+                    f"{required_label('requiredness', item.get('requiredness'))}; "
+                    f"единица: {required_label('unit_family', item.get('unit_family'))}"
+                )
+            lines.append("Оборудование:" if requirements else "Оборудование: не требуется")
+            for item in requirements:
+                alternative = item.get("alternative_group")
+                group = (
+                    f"; группа альтернатив: {required_label('alternative_group', alternative)}"
+                    if alternative else ""
+                )
+                lines.append(
+                    f"  • {required_label('equipment_type', item.get('equipment_type'))} — "
+                    f"{required_label('optionality', item.get('optionality'))}{group}"
+                )
+            lines.append("Группы мышц:")
+            for item in roles:
+                group = item.get("muscle_group") if isinstance(item, dict) else None
+                if not isinstance(group, dict):
+                    raise ContextRepositoryError("incomplete_preview", "exercise muscle group is missing", 400)
+                name = group.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    raise ContextRepositoryError("incomplete_preview", "exercise muscle group has no name", 400)
+                creation = "; будет создана новая группа" if new_groups and group.get("muscle_group_id") in created_ids else ""
+                lines.append(f"  • {name.strip()} — {required_label('role', item.get('role'))}{creation}")
+            lines.append("Другие названия:" if aliases else "Другие названия: нет")
+            for alias in aliases:
+                details = []
+                if alias.get("locale"):
+                    details.append(f"язык: {required_label('locale', alias['locale'])}")
+                if alias.get("context"):
+                    details.append(f"контекст: {alias['context']}")
+                suffix = f" ({'; '.join(details)})" if details else ""
+                lines.append(f"  • {required_label('alias', alias.get('alias'))}{suffix}")
+            missing = []
+            for key, label in (("description", "описание"), ("comment", "комментарий")):
+                value = card.get(key)
+                if value is None or value == "":
+                    missing.append(label)
+                else:
+                    lines.append(f"{label.capitalize()}: {value}")
+            if missing:
+                lines.append("Не указаны: " + ", ".join(missing) + ".")
+            return lines
+
+        name = required_label("canonical_name", exercise.get("canonical_name"))
+        if intent == "create":
+            lines = [f"Создать упражнение «{name}»?", "После подтверждения карточка будет добавлена в каталог упражнений. Знакомым в профиле оно от этого не станет."]
+        else:
+            before = payload.get("before")
+            if not isinstance(before, dict) or not isinstance(before.get("muscle_roles"), list):
+                raise ContextRepositoryError("incomplete_preview", "previous exercise state is missing", 400)
+            lines = [f"Исправить упражнение «{name}»?", "После подтверждения карточка будет обновлена.", "Было:"]
+            lines.extend("  " + line for line in snapshot(before, before["muscle_roles"], new_groups=False))
+            lines.append("Станет:")
+        current = snapshot(exercise, resolved, new_groups=True)
+        lines.extend(("  " + line for line in current) if intent == "correct" else current)
+        reason = payload.get("reason")
+        if reason:
+            lines.append(f"Причина изменения: {reason}")
+        elif intent == "create":
+            lines.append("Причина создания не указана.")
+        lines.append("Изменения пока не сохранены.")
+        return "\n".join(lines)
 
 
 class ContextDatabaseExecutor:
@@ -8907,8 +9527,10 @@ class ContextDatabaseExecutor:
             "create_inventory_change_draft": "CMD-09",
             "create_measurement_session_draft": "CMD-11",
             "create_exercise_catalog_draft": "CMD-22",
+            "create_familiar_exercise_batch_draft": "CMD-25",
             "create_plan_draft": "CMD-05",
             "create_workout_report_draft": "CMD-06",
+            "create_workout_import_batch_draft": "CMD-26",
             "create_correction_draft": "CMD-07",
             "create_record_decision_draft": "CMD-08",
             "create_historical_record_draft": "CMD-24",

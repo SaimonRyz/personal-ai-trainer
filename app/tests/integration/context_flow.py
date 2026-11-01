@@ -70,6 +70,14 @@ def post(
                 mode="json"
             )
             normalized.pop("request_digest")
+            if model is OnboardingDraftRequest:
+                for field in ("draft_id", "expected_revision_id"):
+                    if normalized.get(field) is None:
+                        normalized.pop(field)
+            if model is PreviewRequest and normalized.get("entry_name") is None:
+                normalized.pop("entry_name")
+            if model is PreviewRequest and normalized.get("entry_key") is None:
+                normalized.pop("entry_key")
             body = {**normalized, "request_digest": digest(normalized)}
         except ValidationError:
             if expected_error is None:
@@ -285,12 +293,12 @@ def main() -> None:
             {
                 "goal_id": None,
                 "parent_goal_id": None,
-                "name": "Synthetic pull-up goal",
+                "name": "Synthetic bench goal",
                 "description": None,
-                "goal_type": "performance",
-                "start_value": "5",
-                "target_value": "10",
-                "unit_code": "repetition",
+                "goal_type": "strength",
+                "start_value": "80",
+                "target_value": "100",
+                "unit_code": "kilogram",
                 "set_on": "2026-08-24",
                 "target_date": "2026-12-31",
                 "priority": 10,
@@ -393,6 +401,23 @@ def main() -> None:
     )["data"]
     assert still_empty["profile"] is None and still_empty["goals"] == []
 
+    unsupported_goal = json.loads(json.dumps(onboarding_body))
+    unsupported_goal["goals"][0]["goal_type"] = "unknown_goal_type"
+    rejected_goal = post(
+        "/api/v1/commands/onboarding-drafts", unsupported_goal,
+        key="onboarding-unsupported-goal-type", expected_error=400,
+    )
+    assert rejected_goal["error"]["code"] == "validation_error"
+    assert rejected_goal["error"]["field_errors"][0]["path"] == "goals[0].goal_type"
+    unsupported_unit = json.loads(json.dumps(onboarding_body))
+    unsupported_unit["goals"][0]["unit_code"] = "kg"
+    rejected_unit = post(
+        "/api/v1/commands/onboarding-drafts", unsupported_unit,
+        key="onboarding-unsupported-unit-code", expected_error=400,
+    )
+    assert rejected_unit["error"]["code"] == "validation_error"
+    assert rejected_unit["error"]["field_errors"][0]["path"] == "goals[0].unit_code"
+    assert rejected_unit["error"]["field_errors"][0]["code"] == "unsupported_unit_code"
     draft = post("/api/v1/commands/onboarding-drafts", onboarding_body, key="onboarding-1")["data"]
     assert set(draft) == {
         "draft_id",
@@ -439,18 +464,73 @@ def main() -> None:
     assert preview["canonical_payload"]["equipment"][0]["condition"] == "usable"
     preview_text = preview["canonical_text"]
     assert preview["complete"] is True
-    assert preview_text.startswith("Полное описание первого знакомства\n")
+    assert preview_text.startswith("Первое знакомство: пока ничего не сохранено.\n")
     for detail in (
         familiarity_name,
-        "Synthetic pull-up goal",
-        "2026-12-31",
+        "Synthetic bench goal",
+        "31 декабря 2026 года",
         "Synthetic home gym",
-        "Synthetic barbell",
+        "1 позиция инвентаря",
     ):
         assert detail in preview_text
     assert "Канонические данные" not in preview_text
+    assert "Synthetic barbell" not in preview_text
+    inventory_detail = post(
+        "/api/v1/commands/previews",
+        {
+            "context": context("preview-inventory", at),
+            "revision_id": draft["revision_id"],
+            "detail_level": "inventory",
+        },
+        key="preview-inventory",
+    )["data"]
+    assert inventory_detail["revision_id"] == preview["revision_id"]
+    assert inventory_detail["canonical_payload"] == preview["canonical_payload"]
+    assert inventory_detail["complete"] is False
+    assert "Synthetic barbell" in inventory_detail["canonical_text"]
     assert current_exercise_ref["object_id"] not in preview_text
     assert current_exercise_ref["revision_id"] not in preview_text
+
+    revised_body = json.loads(json.dumps(onboarding_body))
+    revised_body["context"] = context("revise-onboarding-quantity", at)
+    revised_body["draft_id"] = draft["draft_id"]
+    revised_body["expected_revision_id"] = draft["revision_id"]
+    revised_body["equipment"][0]["quantity"] = 1
+    revised_body["equipment"][0]["quantity_unit_code"] = "piece"
+    revised = post(
+        "/api/v1/commands/onboarding-drafts", revised_body, key="onboarding-quantity-revision"
+    )["data"]
+    assert revised["draft_id"] == draft["draft_id"]
+    assert revised["revision_id"] != draft["revision_id"]
+    assert revised["revision_no"] == draft["revision_no"] + 1
+    old_show = post(
+        f"/api/v1/commands/previews/{preview['preview_id']}/shown",
+        {
+            "context": context("old-onboarding-shown", at),
+            "revision_id": draft["revision_id"],
+            "preview_digest": preview["digest"],
+            "shown_message_id": "old-onboarding-shown",
+            "displayed_text_digest": text_digest(preview["canonical_text"]),
+            "cross_dialog": False,
+        },
+        key="old-onboarding-shown", expected_error=409,
+    )
+    assert old_show["error"]["code"] == "stale_preview"
+    old_confirm = confirm_preview(
+        preview, draft, at=at, prefix="old-onboarding-confirm", expected_error=409
+    )
+    assert old_confirm["error"]["code"] == "stale_preview"
+    draft = revised
+    preview = post(
+        "/api/v1/commands/previews",
+        {
+            "context": context("revised-onboarding-preview", at),
+            "revision_id": draft["revision_id"],
+            "detail_level": "full",
+        },
+        key="revised-onboarding-preview",
+    )["data"]
+    assert "1 шт." in preview["canonical_text"]
 
     not_shown = confirm_preview(
         preview, draft, at=at, prefix="onboarding-before-shown", expected_error=400
@@ -586,8 +666,8 @@ def main() -> None:
     assert current["goals"][0]["goal"]["target_date"] == "2026-12-31"
     assert current["equipment"][0]["equipment"]["name"] == "Synthetic barbell"
     assert "place_equipment_availability" not in current
-    assert current["equipment"][0]["equipment"]["quantity"] is None
-    assert current["equipment"][0]["equipment"]["quantity_unit_code"] is None
+    assert current["equipment"][0]["equipment"]["quantity"] == 1
+    assert current["equipment"][0]["equipment"]["quantity_unit_code"] == "piece"
     assert current["equipment"][0]["equipment"]["condition"] == "usable"
     assert current["familiar_exercises"] == [
         {

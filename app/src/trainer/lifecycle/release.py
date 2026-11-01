@@ -12,7 +12,7 @@ import tomllib
 from pathlib import Path
 
 from trainer.lifecycle.alpha import IMAGE_ID, AlphaWorkspaceLifecycleManager
-from trainer.lifecycle.system import LifecycleError, LifecycleManager
+from trainer.lifecycle.system import LifecycleError, LifecycleManager, LifecycleReport
 
 MARKER = "distribution-draft/release-workspace.json"
 MARKER_VALUE = {"kind": "personal-ai-trainer-release-candidate", "version": 1}
@@ -140,6 +140,55 @@ class ReleaseWorkspaceLifecycleManager(AlphaWorkspaceLifecycleManager):
             raise LifecycleError("release build proof is invalid") from error
         if not valid:
             raise LifecycleError("release build proof does not match source and image")
+
+    def _validate_deployed_build_proof(self, local: dict[str, str]) -> None:
+        """Permit a safe stop while source has advanced beyond the running image."""
+        path = self.root / PROOF
+        if path.is_symlink() or not path.is_file():
+            raise LifecycleError("deployed release build proof is missing")
+        try:
+            proof = json.loads(path.read_text(encoding="utf-8"))
+            source = proof["source_files"]
+            image_files = {
+                name: value for name, value in source.items()
+                if name.startswith(("src/", "mcp/", "migrations/"))
+                or name in {"pyproject.toml", "uv.lock", "README.md", "alembic.ini"}
+            }
+            pins = json.loads((self.root / RECIPE).read_text(encoding="utf-8"))
+            inspection = proof["inspection"]
+            postgres = proof["postgres"]
+            valid = (
+                proof["schema_version"] == 1 and proof["status"] == "BUILD_PASS"
+                and IMAGE_ID.fullmatch(local["TRAINER_ALPHA_API_IMAGE"]) is not None
+                and proof["image_id"] == local["TRAINER_ALPHA_API_IMAGE"]
+                and proof["release_inputs"] == pins
+                and source["uv.lock"] == hashlib.sha256((self.root / "uv.lock").read_bytes()).hexdigest()
+                and inspection["source_files"] == image_files
+                and inspection["lock_sha256"] == source["uv.lock"]
+                and inspection["python"] == "3.12.14"
+                and inspection["dependencies_verified"] is True
+                and proof["platform"] == "linux/arm64"
+                and postgres["reference"] == pins["postgres_image"]["reference"]
+                and postgres["config_digest"] == pins["postgres_image"]["expected_image_id"]
+                and postgres["config_bytes_verified"] is True
+                and postgres["local_image_id"] == local["TRAINER_ALPHA_POSTGRES_IMAGE"]
+            )
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            raise LifecycleError("deployed release build proof is invalid") from error
+        if not valid:
+            raise LifecycleError("deployed release build proof does not match configured images")
+
+    def stop(self, *, full: bool = False) -> LifecycleReport:
+        if full:
+            return super().stop(full=True)
+        self._validate_workspace(require_environment=False)
+        if Path(sys.prefix).absolute() != (self.root / ".venv").absolute():
+            raise LifecycleError("release launcher requires its own .venv")
+        self._validate_deployed_build_proof(self._local_environment())
+        owned_services = self._validate_ownership()
+        if self._port_pids(self.api_port) and "api" not in owned_services:
+            raise LifecycleError("release API listener has no owned container")
+        return LifecycleManager.stop(self, full=False)
 
     def _validate_postgres_provenance(self, local: dict[str, str]) -> None:
         try:

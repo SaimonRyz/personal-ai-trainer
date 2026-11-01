@@ -40,15 +40,47 @@ class FamiliarExerciseSelection(ClosedModel):
     exercise_ref: ExerciseRevisionRef
 
 
+class FamiliarExerciseBatchItem(ClosedModel):
+    source_name: str = Field(min_length=1, max_length=200)
+    exercise_ref: ExerciseRevisionRef | None = None
+    new_draft_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def one_resolution(self) -> FamiliarExerciseBatchItem:
+        if (self.exercise_ref is None) == (self.new_draft_revision_id is None):
+            raise ValueError("choose exactly one existing exercise or new exercise draft")
+        return self
+
+
+class WorkoutImportFactSource(ClosedModel):
+    field_path: str = Field(min_length=1, max_length=300, description=(
+        "Exact path of one reported fact, such as /report/local_start_date or "
+        "/report/blocks/1/exercises/1/sets/1/full_reps. Repeat the same locator "
+        "for multiple facts stated in one source excerpt."
+    ))
+    source_locator: str = Field(min_length=1, max_length=500)
+    source_excerpt: str = Field(min_length=1, max_length=1000)
+
+
+class WorkoutImportBatchEntry(ClosedModel):
+    entry_key: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=200)
+    local_start_date: date | None = None
+    decision: Literal["create", "correct", "exclude", "unresolved"]
+    report_draft_revision_id: UUID | None = None
+    reason: str | None = None
+    fact_sources: list[WorkoutImportFactSource] = Field(default_factory=list, max_length=500)
+
+
 class GoalInput(ClosedModel):
     goal_id: UUID | None = None
     parent_goal_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
-    goal_type: str = Field(min_length=1, max_length=100)
+    goal_type: str = Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")
     start_value: Decimal | None = None
     target_value: Decimal | None = None
-    unit_code: str | None = None
+    unit_code: str | None = Field(default=None, description="Use catalog codes: kilogram for kg, repetition for reps; never send kg.")
     set_on: date
     target_date: date
     priority: int = Field(ge=1, le=100)
@@ -69,6 +101,7 @@ EquipmentTypeCode = Literal[
     "weight_plate",
     "bench",
     "pull_up_bar",
+    "parallel_bars",
     "resistance_band",
     "hyperextension_bench",
     "push_up_handles",
@@ -133,9 +166,18 @@ ExerciseMuscleRoleInput = Annotated[
 
 
 class ExerciseMeasurementInput(ClosedModel):
-    metric_kind: str = Field(min_length=1, max_length=100)
+    metric_kind: str = Field(
+        min_length=1, max_length=100,
+        description=(
+            "Exercise measurement: repetitions, duration, or distance. "
+            "External mass belongs to planned/performed set loads."
+        ),
+    )
     requiredness: Literal["required", "optional"]
-    unit_family: str = Field(min_length=1, max_length=100)
+    unit_family: str = Field(
+        min_length=1, max_length=100,
+        description="count for repetitions, time for duration, length for distance",
+    )
 
 
 class ExerciseEquipmentRequirementInput(ClosedModel):
@@ -148,7 +190,7 @@ class ExerciseCatalogInput(ClosedModel):
     exercise_id: UUID | None = None
     canonical_name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=4000)
-    category_code: str = Field(min_length=1, max_length=100)
+    category_code: str = Field(min_length=1, max_length=100, description="Use strength or cardio; jump rope and treadmill walking are cardio.")
     unilateral: bool
     status_code: str = Field(min_length=1, max_length=100)
     comment: str | None = Field(default=None, max_length=2000)
@@ -163,6 +205,7 @@ PlanningEquipmentTypeCode = Literal[
     "weight_plate",
     "bench",
     "pull_up_bar",
+    "parallel_bars",
     "resistance_band",
     "hyperextension_bench",
     "push_up_handles",

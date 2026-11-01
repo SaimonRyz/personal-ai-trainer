@@ -27,8 +27,13 @@ class CalculationRepository(ContextRepository):
         self._loader = loader
 
     @staticmethod
-    def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
-        rendered = ContextRepository._render_preview(payload, detail_level=detail_level)
+    def _render_preview(
+        payload: dict[str, Any], *, detail_level: str = "full",
+        entry_name: str | None = None,
+    ) -> str:
+        rendered = ContextRepository._render_preview(
+            payload, detail_level=detail_level, entry_name=entry_name
+        )
         if payload.get("calculated", {}).get("metric_kind") == "e1rm":
             return "Расчётный e1RM — оценка, не фактический рекорд.\n" + rendered
         return rendered

@@ -20,5 +20,10 @@
   "0019_e_g07_evidence.py": "52f38ba1b49806c649b62a41862c83cd27702ba3bbe4b28166d7429614f225af",
   "0020_h03_exercise_category_seed.py": "4b535b9bc5878424cbed1ce7283465dffef4a7069688e20ca925f8cff3f0645f",
   "0021_evidence_source_availability.py": "09a15641bf8bc50b4d5a968be9891a6a65c7e5c1f60ce06b5d0d3d3cb9cc61ea",
-  "0022_profile_familiar_exercises.py": "97c70674144dfd937db0877a2c0537480a7f89401ebba910a6db5921f6e378d7"
+  "0022_profile_familiar_exercises.py": "97c70674144dfd937db0877a2c0537480a7f89401ebba910a6db5921f6e378d7",
+  "0023_familiar_exercise_batch.py": "82295e80cb53fffef89098c19ba1f4a9ee079a6947f134ff51320707d2185e81",
+  "0024_parallel_bars_equipment.py": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2",
+  "0025_strength_goal_type.py": "bd646fd55fd5b0fb62dde22912f6def65a65346d2660150c8135214498bfb4ec",
+  "0026_cardio_exercise_category.py": "b7230ed88fd9bfe57f71af55ebd3e2214b0b4357ebb72e79c0209279a4e4c67e",
+  "0027_workout_import_batch.py": "0b5f60bfb678e9f6df3a7e6d5ab3f1cae622bc2a0f89eb19cf0587548d193a93"
 }

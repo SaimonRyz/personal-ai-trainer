@@ -170,5 +170,35 @@ def test_measurement_combinations_outside_matrix_fail_closed(
             "unit_family": unit_family,
         }
     ]
-    with pytest.raises(DomainValidationError, match="incompatible"):
+    with pytest.raises(DomainValidationError, match="invalid exercise measurement"):
         validate_exercise(value)
+
+
+def test_load_measurement_points_to_set_loads_without_rejecting_repetitions() -> None:
+    value = payload()
+    value["exercise"]["measurements"].append(  # type: ignore[index]
+        {"metric_kind": "load", "requiredness": "required", "unit_family": "mass"}
+    )
+    with pytest.raises(DomainValidationError) as caught:
+        validate_exercise(value)
+    assert caught.value.status_code == 422
+    assert caught.value.field_errors == [{
+        "path": "exercise.measurements[1].metric_kind",
+        "code": "unsupported_metric_kind",
+        "message_safe": (
+            "Use repetitions, duration, or distance. External mass is a load "
+            "on each planned or performed set, not an exercise measurement."
+        ),
+    }]
+
+
+def test_wrong_unit_family_identifies_unit_field() -> None:
+    value = payload()
+    value["exercise"]["measurements"][0]["unit_family"] = "mass"  # type: ignore[index]
+    with pytest.raises(DomainValidationError) as caught:
+        validate_exercise(value)
+    assert caught.value.field_errors == [{
+        "path": "exercise.measurements[0].unit_family",
+        "code": "incompatible_unit_family",
+        "message_safe": "repetitions requires unit_family=count.",
+    }]

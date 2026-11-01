@@ -33,6 +33,21 @@ def goal(
     }
 
 
+def test_goal_type_matches_catalog_seed_and_reports_field() -> None:
+    strength = goal(goal_id=str(uuid4()))
+    strength["goal_type"] = "strength"
+    validate_goal(strength)
+
+    strength["goal_type"] = "unknown_goal_type"
+    with pytest.raises(DomainValidationError) as error:
+        validate_goal(strength, path="goals[0]")
+    assert error.value.field_errors == [{
+        "path": "goals[0].goal_type",
+        "code": "unsupported_goal_type",
+        "message_safe": "Use performance or strength.",
+    }]
+
+
 def onboarding(goals: list[dict[str, object]]) -> dict[str, object]:
     place_id, equipment_id = str(uuid4()), str(uuid4())
     return {

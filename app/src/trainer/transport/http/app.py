@@ -33,7 +33,10 @@ from trainer.transport.http.contracts import (
     DraftRevisionRequest,
     ErrorDetail,
     ErrorEnvelope,
+    FieldError,
     ExerciseCatalogDraftRequest,
+    FamiliarExerciseBatchDraftRequest,
+    WorkoutImportBatchDraftRequest,
     ExerciseExactResponse,
     ExerciseQueryRequest,
     ExerciseSearchResponse,
@@ -107,6 +110,7 @@ def error_response(
     correlation_id: UUID,
     retryable: bool = False,
     required_next_action: str | None = None,
+    field_errors: list[dict[str, str]] | None = None,
 ) -> JSONResponse:
     envelope = ErrorEnvelope(
         error=ErrorDetail(
@@ -115,7 +119,7 @@ def error_response(
             retryable=retryable,
             operation_state="failed",
             correlation_id=correlation_id,
-            field_errors=[],
+            field_errors=[FieldError(**item) for item in (field_errors or [])],
             changed_dependencies=[],
             required_next_action=required_next_action,
         ),
@@ -321,10 +325,12 @@ def create_app(
             "/api/v1/commands/evidence-drafts": "CMD-14",
             "/api/v1/commands/conclusion-verification-drafts": "CMD-15",
             "/api/v1/commands/exercise-catalog-drafts": "CMD-22",
+            "/api/v1/commands/familiar-exercise-batches": "CMD-25",
             "/api/v1/commands/program-drafts": "CMD-03",
             "/api/v1/commands/program-publication-drafts": "CMD-04",
             "/api/v1/commands/plan-drafts": "CMD-05",
             "/api/v1/commands/workout-report-drafts": "CMD-06",
+            "/api/v1/commands/workout-import-batches": "CMD-26",
             "/api/v1/commands/correction-drafts": "CMD-07",
             "/api/v1/commands/plan-lifecycle-drafts": "CMD-23",
             "/api/v1/commands/previews": "CMD-20",
@@ -405,6 +411,7 @@ def create_app(
             correlation_id=correlation_id,
             retryable=error.status_code >= 500 and error.code != "inconsistent_domain_state",
             required_next_action=error.required_next_action,
+            field_errors=error.field_errors,
         )
 
     def require_context_service() -> ContextService:
@@ -661,7 +668,10 @@ def create_app(
         request: Request,
         idempotency_key: str = Header(alias="Idempotency-Key"),
     ) -> dict[str, Any]:
-        payload = body.model_dump(mode="json")
+        payload = body.model_dump(mode="json", exclude={"draft_id", "expected_revision_id"})
+        if body.draft_id is not None:
+            payload["draft_id"] = str(body.draft_id)
+            payload["expected_revision_id"] = str(body.expected_revision_id)
         service = require_context_service()
         service.verify_digest(payload, body.request_digest)
         normalized = service.prepare_onboarding(
@@ -765,6 +775,33 @@ def create_app(
         return envelope(
             service.execute(
                 "create_exercise_catalog_draft",
+                payload=payload,
+                key=idempotency_key,
+                correlation_id=request.state.correlation_id,
+                causation_id=request.state.causation_id,
+            ),
+            request,
+        )
+
+    @app.post(
+        "/api/v1/commands/familiar-exercise-batches",
+        response_model=DataEnvelope[DraftResult],
+        responses=DOMAIN_ERROR_RESPONSES,
+    )
+    def familiar_exercise_batch_draft(
+        body: FamiliarExerciseBatchDraftRequest,
+        request: Request,
+        idempotency_key: str = Header(alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        payload = body.model_dump(mode="json", exclude={"draft_id", "expected_revision_id"})
+        if body.draft_id is not None:
+            payload["draft_id"] = str(body.draft_id)
+            payload["expected_revision_id"] = str(body.expected_revision_id)
+        service = require_context_service()
+        service.verify_digest(payload, body.request_digest)
+        return envelope(
+            service.execute(
+                "create_familiar_exercise_batch_draft",
                 payload=payload,
                 key=idempotency_key,
                 correlation_id=request.state.correlation_id,
@@ -926,6 +963,28 @@ def create_app(
         )
 
     @app.post(
+        "/api/v1/commands/workout-import-batches",
+        response_model=DataEnvelope[DraftResult],
+        responses=DOMAIN_ERROR_RESPONSES,
+    )
+    def workout_import_batch_draft(
+        body: WorkoutImportBatchDraftRequest,
+        request: Request,
+        idempotency_key: str = Header(alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        payload = body.model_dump(mode="json", exclude={"draft_id", "expected_revision_id"})
+        if body.draft_id is not None:
+            payload["draft_id"] = str(body.draft_id)
+            payload["expected_revision_id"] = str(body.expected_revision_id)
+        service = require_context_service()
+        service.verify_digest(payload, body.request_digest)
+        return envelope(service.execute(
+            "create_workout_import_batch_draft", payload=payload, key=idempotency_key,
+            correlation_id=request.state.correlation_id,
+            causation_id=request.state.causation_id,
+        ), request)
+
+    @app.post(
         "/api/v1/commands/correction-drafts",
         response_model=DataEnvelope[DraftResult],
         responses=DOMAIN_ERROR_RESPONSES,
@@ -1066,7 +1125,11 @@ def create_app(
         request: Request,
         idempotency_key: str = Header(alias="Idempotency-Key"),
     ) -> dict[str, Any]:
-        payload = body.model_dump(mode="json")
+        payload = body.model_dump(mode="json", exclude={"entry_name", "entry_key"})
+        if body.entry_name is not None:
+            payload["entry_name"] = body.entry_name
+        if body.entry_key is not None:
+            payload["entry_key"] = body.entry_key
         service = require_context_service()
         service.verify_digest(payload, body.request_digest)
         return envelope(

@@ -18,6 +18,8 @@ from trainer_mcp.contracts import (
     ContextEquipmentInput,
     ExerciseCatalogInput,
     FamiliarExerciseSelection,
+    FamiliarExerciseBatchItem,
+    WorkoutImportBatchEntry,
     GoalInput,
     PlaceInput,
     PlanTreeInput,
@@ -68,6 +70,8 @@ ALLOWED_STATIC_ROUTES = {
     "/api/v1/commands/goal-drafts",
     "/api/v1/commands/onboarding-drafts",
     "/api/v1/commands/exercise-catalog-drafts",
+    "/api/v1/commands/familiar-exercise-batches",
+    "/api/v1/commands/workout-import-batches",
     "/api/v1/commands/program-drafts",
     "/api/v1/commands/program-publication-drafts",
     "/api/v1/commands/plan-drafts",
@@ -228,8 +232,10 @@ def create_onboarding_draft(
     places: list[PlaceInput],
     equipment: list[ContextEquipmentInput],
     familiar_exercises: list[FamiliarExerciseSelection] | None = None,
+    draft_id: UUID | None = None,
+    expected_revision_id: UUID | None = None,
 ) -> dict[str, Any]:
-    """Create an onboarding draft, optionally with exact familiar exercise revisions."""
+    """Create or revise an onboarding draft; a revision replaces its full package."""
     body = {
         "context": context(conversation_id, message_id, timezone),
         "profile": json_model(profile),
@@ -238,6 +244,9 @@ def create_onboarding_draft(
         "equipment": [json_model(item) for item in equipment],
         "familiar_exercises": [json_model(item) for item in familiar_exercises or []],
     }
+    if draft_id is not None or expected_revision_id is not None:
+        body["draft_id"] = str(draft_id) if draft_id else None
+        body["expected_revision_id"] = str(expected_revision_id) if expected_revision_id else None
     with_request_digest(body)
     return api_call(
         "/api/v1/commands/onboarding-drafts",
@@ -265,7 +274,7 @@ def create_goal_draft(
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
     name: Annotated[str, Field(min_length=1, max_length=200)],
-    goal_type: Annotated[str, Field(min_length=1, max_length=100)],
+    goal_type: Annotated[str, Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")],
     set_on: date,
     target_date: date,
     priority: Annotated[int, Field(ge=1, le=100)],
@@ -273,7 +282,7 @@ def create_goal_draft(
     description: str | None = None,
     start_value: DecimalString | None = None,
     target_value: DecimalString | None = None,
-    unit_code: Annotated[str, Field(min_length=1, max_length=100)] | None = None,
+    unit_code: Annotated[str, Field(min_length=1, max_length=100, description="Use kilogram for kg or repetition for reps; never send kg.")] | None = None,
     comment: Annotated[str, Field(max_length=2000)] | None = None,
 ) -> dict[str, Any]:
     """Create a goal draft only; this does not persist a confirmed goal."""
@@ -477,7 +486,10 @@ def create_exercise_draft(
     expected_revision_id: UUID | None = None,
     reason: Annotated[str, Field(min_length=1, max_length=1000)] | None = None,
 ) -> dict[str, Any]:
-    """Create or fully replace an exercise aggregate draft, including its child tree."""
+    """Create or replace an exercise draft. Measurements: repetitions/count,
+    duration/time, distance/length (required or optional). Record external mass
+    in each planned or performed set's loads, not in exercise measurements.
+    """
     body = {
         "context": context(conversation_id, message_id, timezone),
         "intent": intent,
@@ -492,6 +504,87 @@ def create_exercise_draft(
         correlation_id,
         causation_id,
         idempotency_key,
+    )
+
+
+@mcp.tool(
+    structured_output=True,
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
+def create_familiar_exercise_batch_draft(
+    conversation_id: ConversationId,
+    message_id: MessageId,
+    timezone: Timezone,
+    correlation_id: UUID,
+    causation_id: UUID,
+    idempotency_key: IdempotencyKey,
+    profile_id: UUID,
+    expected_profile_revision_id: UUID,
+    items: list[FamiliarExerciseBatchItem],
+    unresolved_names: list[str] | None = None,
+    draft_id: UUID | None = None,
+    expected_revision_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Prepare or revise one familiar-exercise list from exact refs and new exercise drafts.
+    Show and confirm only this batch preview; do not confirm child exercise drafts.
+    """
+    body = {
+        "context": context(conversation_id, message_id, timezone),
+        "profile_id": str(profile_id),
+        "expected_profile_revision_id": str(expected_profile_revision_id),
+        "items": [json_model(item) for item in items],
+        "unresolved_names": unresolved_names or [],
+    }
+    if draft_id is not None or expected_revision_id is not None:
+        body["draft_id"] = str(draft_id) if draft_id else None
+        body["expected_revision_id"] = str(expected_revision_id) if expected_revision_id else None
+    with_request_digest(body)
+    return api_call(
+        "/api/v1/commands/familiar-exercise-batches",
+        body, correlation_id, causation_id, idempotency_key,
+    )
+
+
+@mcp.tool(
+    structured_output=True,
+    annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False,
+    ),
+)
+def create_workout_import_batch_draft(
+    conversation_id: ConversationId,
+    message_id: MessageId,
+    timezone: Timezone,
+    correlation_id: UUID,
+    causation_id: UUID,
+    idempotency_key: IdempotencyKey,
+    profile_id: UUID,
+    expected_profile_revision_id: UUID,
+    part_label: str,
+    entries: list[WorkoutImportBatchEntry],
+    draft_id: UUID | None = None,
+    expected_revision_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Prepare one named historical-workout part; show and confirm only its batch preview."""
+    body = {
+        "context": context(conversation_id, message_id, timezone),
+        "profile_id": str(profile_id),
+        "expected_profile_revision_id": str(expected_profile_revision_id),
+        "part_label": part_label,
+        "entries": [json_model(item) for item in entries],
+    }
+    if draft_id is not None or expected_revision_id is not None:
+        body["draft_id"] = str(draft_id) if draft_id else None
+        body["expected_revision_id"] = str(expected_revision_id) if expected_revision_id else None
+    with_request_digest(body)
+    return api_call(
+        "/api/v1/commands/workout-import-batches",
+        body, correlation_id, causation_id, idempotency_key,
     )
 
 
@@ -719,17 +812,23 @@ def render_preview(
     message_id: MessageId,
     timezone: Timezone,
     revision_id: UUID,
-    detail_level: Literal["short", "full"],
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout"],
     correlation_id: UUID,
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
+    entry_name: str | None = None,
+    entry_key: str | None = None,
 ) -> dict[str, Any]:
-    """Request the API's canonical preview for one exact draft revision."""
+    """Render one exact revision. Full confirms; onboarding and familiar-batch sections are nonconfirmable views."""
     body: dict[str, Any] = {
         "context": context(conversation_id, message_id, timezone),
         "revision_id": str(revision_id),
         "detail_level": detail_level,
     }
+    if entry_name is not None:
+        body["entry_name"] = entry_name
+    if entry_key is not None:
+        body["entry_key"] = entry_key
     body["request_digest"] = canonical_digest(body)
     return api_call(
         "/api/v1/commands/previews", body, correlation_id, causation_id, idempotency_key
