@@ -95,8 +95,22 @@ def entry(key: str, name: str, date: str, revision: str) -> dict:
             "fact_sources": [
                 {"field_path": "/report/local_start_date", "source_locator": f"{key}:date",
                  "source_excerpt": date},
+                {"field_path": "/report/name", "source_locator": f"{key}:name",
+                 "source_excerpt": name},
+                {"field_path": "/report/lifecycle", "source_locator": f"{key}:session",
+                 "source_excerpt": "тренировка завершена"},
+                {"field_path": "/report/blocks/1/block_type_code", "source_locator": f"{key}:block",
+                 "source_excerpt": "обычный блок"},
+                {"field_path": "/report/blocks/1/exercises/1/result", "source_locator": f"{key}:exercise",
+                 "source_excerpt": "упражнение выполнено"},
                 {"field_path": "/report/blocks/1/exercises/1/sets/1",
                  "source_locator": f"{key}:set", "source_excerpt": "синтетический подход"},
+                {"field_path": "/report/blocks/1/exercises/1/sets/1/set_type_code",
+                 "source_locator": f"{key}:set", "source_excerpt": "рабочий подход"},
+                {"field_path": "/report/blocks/1/exercises/1/sets/1/status",
+                 "source_locator": f"{key}:set", "source_excerpt": "подход выполнен"},
+                {"field_path": "/report/blocks/1/exercises/1/sets/1/full_reps",
+                 "source_locator": f"{key}:set", "source_excerpt": "синтетические повторения"},
             ]}
 
 
@@ -137,6 +151,23 @@ def main() -> None:
     second = post("/api/v1/commands/workout-report-drafts", {
         "context": context("report-b"), "report": report("2026-10-15", "Синтетическая B", str(exercise), 6)
     }, key="batch-report-b", model=WorkoutReportDraftRequest)["data"]
+    wrong_name = entry("wrong-name", "Подменённое название", "2026-10-14", first["revision_id"])
+    rejected_name = post("/api/v1/commands/workout-import-batches", {
+        "context": context("wrong-name"), "profile_id": ref["object_id"],
+        "expected_profile_revision_id": ref["revision_id"], "part_label": "ошибка названия",
+        "entries": [wrong_name]}, key="batch-wrong-name", model=WorkoutImportBatchDraftRequest,
+        expected=422)
+    assert rejected_name["error"]["code"] == "validation_error"
+    assert rejected_name["error"]["field_errors"][0]["code"] == "report_name_mismatch"
+    missing_source = entry("missing-source", "Синтетическая A", "2026-10-14", first["revision_id"])
+    missing_source["fact_sources"] = [source for source in missing_source["fact_sources"]
+                                      if not source["field_path"].endswith("/full_reps")]
+    rejected_source = post("/api/v1/commands/workout-import-batches", {
+        "context": context("missing-source"), "profile_id": ref["object_id"],
+        "expected_profile_revision_id": ref["revision_id"], "part_label": "ошибка источника",
+        "entries": [missing_source]}, key="batch-missing-source",
+        model=WorkoutImportBatchDraftRequest, expected=422)
+    assert rejected_source["error"]["field_errors"][0]["code"] == "missing_fact_source"
     body = {"context": context("batch"), "profile_id": ref["object_id"],
             "expected_profile_revision_id": ref["revision_id"], "part_label": "октябрь",
             "entries": [entry("a", "Синтетическая A", "2026-10-14", first["revision_id"]),
@@ -274,7 +305,7 @@ def main() -> None:
     initial = post("/api/v1/commands/workout-import-batches", revision_body,
                    key="batch-revision-initial", model=WorkoutImportBatchDraftRequest)["data"]
     old_preview = show(initial, "revision-old")
-    revision_body["entries"][0]["name"] = "Синтетическая новая уточнённая"
+    revision_body["entries"][0]["reason"] = "уточнён источник записи"
     revision_body["draft_id"] = initial["draft_id"]
     revision_body["expected_revision_id"] = initial["revision_id"]
     updated = post("/api/v1/commands/workout-import-batches", revision_body,
@@ -289,7 +320,7 @@ def main() -> None:
         "context": context("revision-new-preview"), "revision_id": updated["revision_id"],
         "detail_level": "full"}, key="batch-revision-new-preview",
         model=PreviewRequest)["data"]
-    assert "Синтетическая новая уточнённая" in new_preview["canonical_text"]
+    assert "уточнён источник записи" in new_preview["canonical_text"]
     print("PASS: atomic import, rollback, replay, provenance, duplicate choice, stale child, correction, batch revision")
 
 

@@ -6,6 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+from trainer.infrastructure.db.context_repository import ContextRepositoryError
 from trainer.transport.http.contracts import PreviewRequest, WorkoutImportBatchDraftRequest
 
 
@@ -62,3 +63,40 @@ def test_overview_lists_every_entry_and_result() -> None:
     })
     assert "2026-10-14" in text and "Жим лёжа (1 повт. × 85 кг)" in text
     assert "Запись без даты" in text and "Не записывать: 1" in text
+
+
+def test_reported_values_need_individual_source_paths() -> None:
+    report = {"name": "Ходьба", "blocks": [{"position": 1, "exercises": [{
+        "position": 1, "sets": [{"position": 1, "full_reps": None,
+        "metrics": [{"metric_kind": "distance", "value": "1000", "source_kind": "user"}],
+        "loads": []}],
+    }]}]}
+    with pytest.raises(ContextRepositoryError, match="/report/name"):
+        WorkoutImportBatchRepository._check_fact_sources({"name": "Ходьба", "blocks": []}, set())
+    with pytest.raises(ContextRepositoryError, match="distance/value"):
+        WorkoutImportBatchRepository._check_fact_sources(report, {"/report/name"})
+    WorkoutImportBatchRepository._check_fact_sources(report, {
+        "/report/name", "/report/blocks/1/exercises/1/sets/1/metrics/distance/value",
+    })
+
+
+def test_batch_summary_keeps_duration_and_distance() -> None:
+    class Result:
+        def scalar_one_or_none(self) -> str:
+            return "Ходьба"
+
+    class Session:
+        def execute(self, *_args: object, **_kwargs: object) -> Result:
+            return Result()
+
+    class Repository:
+        session = Session()
+
+    summary = WorkoutImportBatchRepository(Repository())._exercise_summaries({
+        "blocks": [{"exercises": [{"exercise_id": str(uuid4()),
+            "exercise_revision_id": str(uuid4()), "sets": [{"full_reps": None,
+                "metrics": [{"metric_kind": "duration", "value": "600", "unit_code": "second"},
+                            {"metric_kind": "distance", "value": "1000", "unit_code": "meter"}],
+                "loads": []}]}]}],
+    })
+    assert summary == ["Ходьба (600 с × 1000 м)"]

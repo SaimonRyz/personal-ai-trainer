@@ -53,7 +53,11 @@ class FamiliarExerciseBatchItem(ClosedModel):
 
 
 class WorkoutImportFactSource(ClosedModel):
-    field_path: str = Field(min_length=1, max_length=300)
+    field_path: str = Field(min_length=1, max_length=300, description=(
+        "Exact path of one reported fact, such as /report/local_start_date or "
+        "/report/blocks/1/exercises/1/sets/1/full_reps. Repeat the same locator "
+        "for multiple facts stated in one source excerpt."
+    ))
     source_locator: str = Field(min_length=1, max_length=500)
     source_excerpt: str = Field(min_length=1, max_length=1000)
 

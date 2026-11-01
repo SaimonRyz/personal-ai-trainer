@@ -42,6 +42,10 @@ class WorkoutImportBatchRepository:
                               typed["conversation_id"])
             if row["content_digest"] != entry["report_draft_digest"]:
                 raise ContextRepositoryError("stale_preview", "report draft content changed", 409)
+            report = entry["report_draft"]["report"]
+            if report.get("name") is not None and report["name"] != entry["name"]:
+                raise ContextRepositoryError("stale_preview", "batch name differs from report name", 409)
+            self._check_fact_sources(report, {source["field_path"] for source in entry["fact_sources"]})
             if entry["decision"] == "correct":
                 self._check_correction_records(entry["report_draft"])
             current = self._same_date_sessions(UUID(typed["profile_id"]), entry["local_start_date"])
@@ -158,6 +162,12 @@ class WorkoutImportBatchRepository:
             report = typed["report"]
             if report["local_start_date"] != item["local_start_date"]:
                 raise ContextRepositoryError("validation_error", "batch date differs from report date", 422)
+            if report.get("name") is not None and report["name"] != item["name"]:
+                raise ContextRepositoryError(
+                    "validation_error", "batch name differs from report name", 422,
+                    field_errors=[{"path": "entries.name", "code": "report_name_mismatch",
+                                   "message_safe": f"Use the exact report name: {report['name']}."}],
+                )
             if (item["decision"] == "correct") != bool(typed.get("correction")):
                 raise ContextRepositoryError("validation_error", "batch decision differs from report draft", 422)
             session_id = str(typed["session_id"])
@@ -169,6 +179,7 @@ class WorkoutImportBatchRepository:
                 raise ContextRepositoryError("validation_error", "fact source path must target report", 422)
             if "/report/local_start_date" not in source_paths:
                 raise ContextRepositoryError("validation_error", "report date needs a source", 422)
+            self._check_fact_sources(report, set(source_paths))
             for block in report["blocks"]:
                 for exercise in block["exercises"]:
                     scope = f"/report/blocks/{block['position']}/exercises/{exercise['position']}"
@@ -200,6 +211,7 @@ class WorkoutImportBatchRepository:
                           "same_date_existing_count": len(existing),
                           "same_date_sessions": existing,
                           "unknown_fact_count": len(typed.get("gaps", [])),
+                          "report_name_missing": report.get("name") is None,
                           "exercise_summaries": self._exercise_summaries(report)})
             entries.append(entry)
             change_plan.extend(typed["change_plan"])
@@ -256,6 +268,51 @@ class WorkoutImportBatchRepository:
                       "revision_id": str(revision_id)}])
         return response
 
+    @staticmethod
+    def _check_fact_sources(report: dict[str, Any], paths: set[str]) -> None:
+        """Require a source for each user-reported value, not generated IDs or snapshots."""
+        required: set[str] = set()
+        for field in ("local_start_date", "name", "started_at", "ended_at",
+                      "duration_seconds", "lifecycle", "effort", "comment"):
+            if report.get(field) is not None:
+                required.add(f"/report/{field}")
+        for metric in report.get("workout_metrics", []):
+            if metric.get("source_kind") == "user":
+                required.add(f"/report/workout_metrics/{metric['metric_kind']}/value")
+        for block in report["blocks"]:
+            block_scope = f"/report/blocks/{block['position']}"
+            for field in ("block_type_code", "declared_rounds", "rest_seconds", "comment"):
+                if block.get(field) is not None:
+                    required.add(f"{block_scope}/{field}")
+            for exercise in block["exercises"]:
+                scope = f"{block_scope}/exercises/{exercise['position']}"
+                for field in ("result", "reason"):
+                    if exercise.get(field) is not None:
+                        required.add(f"{scope}/{field}")
+                for actual_set in exercise["sets"]:
+                    target = scope + f"/sets/{actual_set['position']}"
+                    for field in ("round_no", "side", "set_type_code", "status",
+                                  "full_reps", "partial_reps", "failed_attempts", "reported_rpe",
+                                  "reported_rir", "failure_reached", "rom_state", "technique_state",
+                                  "tempo", "pause_seconds", "rest_after_seconds", "comment"):
+                        if actual_set.get(field) is not None:
+                            required.add(f"{target}/{field}")
+                    for metric in actual_set["metrics"]:
+                        if metric.get("source_kind") == "user":
+                            required.add(f"{target}/metrics/{metric['metric_kind']}/value")
+                    for load in actual_set["loads"]:
+                        for field in ("load_kind", "mass", "unit_code", "mass_meaning",
+                                      "item_count", "direction", "raw_ambiguous_text"):
+                            if load.get(field) is not None:
+                                required.add(f"{target}/loads/{load['position']}/{field}")
+        missing = sorted(required - paths)
+        if missing:
+            raise ContextRepositoryError(
+                "validation_error", f"reported fact needs a source: {missing[0]}", 422,
+                field_errors=[{"path": "entries.fact_sources", "code": "missing_fact_source",
+                               "message_safe": f"Add source for {missing[0]}."}],
+            )
+
     def _exercise_summaries(self, report: dict[str, Any]) -> list[str]:
         names: list[str] = []
         for block in report["blocks"]:
@@ -276,6 +333,12 @@ class WorkoutImportBatchRepository:
                                             if metric["metric_kind"] == "repetitions"), None)
                     if repetitions is not None:
                         pieces.append(f"{repetitions} повт.")
+                    for metric in actual_set["metrics"]:
+                        if metric["metric_kind"] in {"duration", "distance"}:
+                            unit = {"second": "с", "meter": "м"}.get(
+                                metric["unit_code"], metric["unit_code"]
+                            )
+                            pieces.append(f"{metric['value']} {unit}")
                     loads = [f"{load['mass']} { {'kilogram': 'кг', 'kg': 'кг', 'pound': 'фунтов'}.get(load['unit_code'], load['unit_code'])}"
                              for load in actual_set["loads"]
                              if load.get("mass") is not None and load.get("load_kind") == "external"]
@@ -305,6 +368,8 @@ class WorkoutImportBatchRepository:
             action = {"create": "создать", "correct": "исправить", "exclude": "исключить",
                       "unresolved": "не включать до уточнения"}[item["decision"]]
             line = f"{index}. {date} — {item['name']}: {action}"
+            if item.get("report_name_missing"):
+                line += "; название в отчёте не задано"
             if item.get("exercise_summaries"):
                 summaries = item["exercise_summaries"]
                 line += "; результаты: " + ", ".join(summaries[:3])
