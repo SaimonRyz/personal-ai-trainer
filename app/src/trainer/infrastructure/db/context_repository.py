@@ -8989,7 +8989,7 @@ class ContextRepository:
 
         name = required_label("canonical_name", exercise.get("canonical_name"))
         if intent == "create":
-            lines = [f"Создать упражнение «{name}»?", "После подтверждения карточка будет добавлена в каталог."]
+            lines = [f"Создать упражнение «{name}»?", "После подтверждения карточка будет добавлена в каталог знакомых упражнений."]
         else:
             before = payload.get("before")
             if not isinstance(before, dict) or not isinstance(before.get("muscle_roles"), list):
