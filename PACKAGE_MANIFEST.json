@@ -991,8 +991,8 @@
       "sha256": "2844fa329c94dbcd113276c4ec62f5882134b03694f9dc24bf80c47ddc70a6a3"
     },
     "trainer-workspace/.codex/config.toml": {
-      "size": 1372,
-      "sha256": "3dbb3a783e13758d3f3b99de4f7dabbd5d26f97e0a83c61b299c4c6419de5a4b"
+      "size": 1416,
+      "sha256": "a36c4e3610699196c46e8f6fac8be1376d38a36dda4a255489762720dc152691"
     },
     "trainer-workspace/.codex/skills/personal-trainer/SKILL.md": {
       "size": 29321,

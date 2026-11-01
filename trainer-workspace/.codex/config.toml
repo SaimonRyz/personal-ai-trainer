@@ -11,6 +11,7 @@ enabled_tools = [
     "confirm_preview",
     "create_evidence_draft",
     "create_exercise_draft",
+    "create_familiar_exercise_batch_draft",
     "create_goal_draft",
     "create_historical_record_draft",
     "create_inventory_change_draft",
