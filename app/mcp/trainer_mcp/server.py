@@ -19,6 +19,7 @@ from trainer_mcp.contracts import (
     ExerciseCatalogInput,
     FamiliarExerciseSelection,
     FamiliarExerciseBatchItem,
+    WorkoutImportBatchEntry,
     GoalInput,
     PlaceInput,
     PlanTreeInput,
@@ -70,6 +71,7 @@ ALLOWED_STATIC_ROUTES = {
     "/api/v1/commands/onboarding-drafts",
     "/api/v1/commands/exercise-catalog-drafts",
     "/api/v1/commands/familiar-exercise-batches",
+    "/api/v1/commands/workout-import-batches",
     "/api/v1/commands/program-drafts",
     "/api/v1/commands/program-publication-drafts",
     "/api/v1/commands/plan-drafts",
@@ -551,6 +553,44 @@ def create_familiar_exercise_batch_draft(
 @mcp.tool(
     structured_output=True,
     annotations=ToolAnnotations(
+        readOnlyHint=False, destructiveHint=False, idempotentHint=True, openWorldHint=False,
+    ),
+)
+def create_workout_import_batch_draft(
+    conversation_id: ConversationId,
+    message_id: MessageId,
+    timezone: Timezone,
+    correlation_id: UUID,
+    causation_id: UUID,
+    idempotency_key: IdempotencyKey,
+    profile_id: UUID,
+    expected_profile_revision_id: UUID,
+    part_label: str,
+    entries: list[WorkoutImportBatchEntry],
+    draft_id: UUID | None = None,
+    expected_revision_id: UUID | None = None,
+) -> dict[str, Any]:
+    """Prepare one named historical-workout part; show and confirm only its batch preview."""
+    body = {
+        "context": context(conversation_id, message_id, timezone),
+        "profile_id": str(profile_id),
+        "expected_profile_revision_id": str(expected_profile_revision_id),
+        "part_label": part_label,
+        "entries": [json_model(item) for item in entries],
+    }
+    if draft_id is not None or expected_revision_id is not None:
+        body["draft_id"] = str(draft_id) if draft_id else None
+        body["expected_revision_id"] = str(expected_revision_id) if expected_revision_id else None
+    with_request_digest(body)
+    return api_call(
+        "/api/v1/commands/workout-import-batches",
+        body, correlation_id, causation_id, idempotency_key,
+    )
+
+
+@mcp.tool(
+    structured_output=True,
+    annotations=ToolAnnotations(
         readOnlyHint=False,
         destructiveHint=False,
         idempotentHint=True,
@@ -772,11 +812,12 @@ def render_preview(
     message_id: MessageId,
     timezone: Timezone,
     revision_id: UUID,
-    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups"],
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout"],
     correlation_id: UUID,
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
     entry_name: str | None = None,
+    entry_key: str | None = None,
 ) -> dict[str, Any]:
     """Render one exact revision. Full confirms; onboarding and familiar-batch sections are nonconfirmable views."""
     body: dict[str, Any] = {
@@ -786,6 +827,8 @@ def render_preview(
     }
     if entry_name is not None:
         body["entry_name"] = entry_name
+    if entry_key is not None:
+        body["entry_key"] = entry_key
     body["request_digest"] = canonical_digest(body)
     return api_call(
         "/api/v1/commands/previews", body, correlation_id, causation_id, idempotency_key

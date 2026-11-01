@@ -161,6 +161,11 @@ MIGRATIONS = (
         "b3d559f62213c86a84c14898ea1660c7fdb547fde2919949e0a3a004b4322dea",
         "0026_cardio_exercise_category.py",
     ),
+    MigrationSpec(
+        "0027_workout_import_batch",
+        "f5f909e9113025955bd78a0795f6981e7a2e15cc1131e4d5f3f66ed971ee39d7",
+        "0027_workout_import_batch.py",
+    ),
 )
 
 

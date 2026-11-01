@@ -64,6 +64,7 @@ def test_active_tool_catalog_is_closed_and_contains_no_fixture_tools() -> None:
         "create_program_draft",
         "create_program_publication_draft",
         "create_workout_report_draft",
+        "create_workout_import_batch_draft",
         "get_body_measurements",
         "get_operation_status",
         "get_current_program",

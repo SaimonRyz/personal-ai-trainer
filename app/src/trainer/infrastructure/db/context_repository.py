@@ -1135,6 +1135,16 @@ class ContextRepository:
             causation_id=causation_id,
         )
 
+    def create_workout_import_batch_draft(
+        self, *, payload: dict[str, Any], key: str, correlation_id: UUID,
+        causation_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+        return WorkoutImportBatchRepository(self).create(
+            payload=payload, key=key, correlation_id=correlation_id, causation_id=causation_id
+        )
+
     def get_workout_history(self, *, payload: dict[str, Any]) -> dict[str, Any]:
         if payload.get("mode", "range") == "all_confirmed":
             from trainer.infrastructure.db.workout_history_snapshots import (
@@ -2611,6 +2621,20 @@ class ContextRepository:
                         }
                     )
                     seen.add(key)
+        import_payload = self.session.execute(text("""
+            SELECT dr.typed_payload FROM trainer.workout_session_revisions r
+            JOIN trainer.confirmations c ON c.confirmation_id=r.confirmation_id
+            JOIN trainer.draft_revisions dr ON dr.draft_revision_id=c.draft_revision_id
+            JOIN trainer.drafts d ON d.draft_id=dr.draft_id
+            WHERE r.session_revision_id=:revision AND d.intent_type='workout_import_batch'
+        """), {"revision": revision_id}).scalar_one_or_none()
+        if import_payload:
+            matching = [item for item in import_payload["entries"]
+                        if item.get("report_draft", {}).get("session_revision_id") == str(revision_id)]
+            if len(matching) != 1:
+                raise ContextRepositoryError("inconsistent_domain_state", "import source is unavailable", 500)
+            provenance.extend({"kind": "historical_import_source", **source}
+                              for source in matching[0]["fact_sources"])
         return provenance
 
     def create_plan_lifecycle_draft(
@@ -4529,6 +4553,8 @@ class ContextRepository:
             raise ContextRepositoryError("validation_error", "section details are available only for onboarding", 422)
         if detail_level in {"exercise", "groups"} and row["intent_type"] != "familiar_exercise_batch":
             raise ContextRepositoryError("validation_error", "exercise details are available only for familiar batches", 422)
+        if detail_level == "workout" and row["intent_type"] != "workout_import_batch":
+            raise ContextRepositoryError("validation_error", "workout details are available only for import batches", 422)
         dependencies = [
             {
                 "dependency_type": item["dependency_type"],
@@ -4553,14 +4579,43 @@ class ContextRepository:
         # binds the readable text and the exact dependency snapshot; exercise
         # previews need not print internal dependency identifiers.
         presentation_payload = {**canonical_payload, "dependencies": dependencies}
-        canonical_text = (
-            self._render_workout_report_preview(presentation_payload)
-            if canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction")
-            else self._render_preview(
+        if canonical_payload.get("intent") == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            batch = WorkoutImportBatchRepository(self)
+            batch.validate_children(canonical_payload)
+            if detail_level == "workout":
+                matches = [item for item in canonical_payload["entries"]
+                           if item["entry_key"] == payload["entry_key"]
+                           and item["decision"] in {"create", "correct"}]
+                if len(matches) != 1:
+                    raise ContextRepositoryError("validation_error", "select one included workout", 422)
+                selected = matches[0]
+                canonical_text = self._render_workout_report_preview(selected["report_draft"])
+                correction = selected["report_draft"].get("correction")
+                if correction:
+                    before = correction["before"]
+                    before_exercises = WorkoutImportBatchRepository(self)._exercise_summaries(before)
+                    canonical_text = (
+                        "Исправить существующую тренировку.\n"
+                        f"Было: {before['local_start_date']}; упражнения: "
+                        + (", ".join(before_exercises) if before_exercises else "не указаны")
+                        + f".\nПричина исправления: {correction['reason']}.\nСтанет:\n"
+                        + canonical_text
+                    )
+                canonical_text += "\nИсточники указанных фактов:\n" + "\n".join(
+                    f"• {source['field_path']}: {source['source_locator']} — {source['source_excerpt']}"
+                    for source in selected["fact_sources"]
+                )
+            else:
+                canonical_text = batch.render(canonical_payload)
+        elif canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction"):
+            canonical_text = self._render_workout_report_preview(presentation_payload)
+        else:
+            canonical_text = self._render_preview(
                 presentation_payload, detail_level=detail_level,
                 entry_name=payload.get("entry_name"),
             )
-        )
         gaps = canonical_payload.get("gaps", [])
         if canonical_payload.get("intent") == "workout_report":
             is_complete = detail_level == "full" and all(
@@ -4577,6 +4632,7 @@ class ContextRepository:
                 "confirmation_kind": row["confirmation_kind"],
                 "detail_level": detail_level,
                 **({"entry_name": payload["entry_name"]} if payload.get("entry_name") else {}),
+                **({"entry_key": payload["entry_key"]} if payload.get("entry_key") else {}),
             }
         )
         preview_id = uuid4()
@@ -4665,6 +4721,13 @@ class ContextRepository:
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            batch = WorkoutImportBatchRepository(self)
+            batch.validate_children(dict(row["typed_payload"]))
+            if row["canonical_text"] != batch.render(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
         if row["intent_type"] == "workout_report" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if (
@@ -4856,6 +4919,13 @@ class ContextRepository:
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            batch = WorkoutImportBatchRepository(self)
+            batch.validate_children(dict(row["typed_payload"]))
+            if row["detail_level"] == "full" and row["canonical_text"] != batch.render(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
         if row["intent_type"] == "workout_report" and row["detail_level"] == "full" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if row["intent_type"] == "program":
@@ -5105,7 +5175,25 @@ class ContextRepository:
                 "now": now,
             },
         )
-        if "plan_lifecycle" in typed:
+        if typed.get("intent") == "workout_import_batch":
+            from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
+
+            invalidated = WorkoutImportBatchRepository(self).commit(
+                typed, confirmation_id, commit_result_id, changes, now
+            )
+            if sorted(str(item) for item in invalidated) != sorted(
+                str(item["object_id"]) for item in expected_invalidated_refs
+            ):
+                raise ContextRepositoryError("stale_preview", "correction effects changed", 409)
+            response["domain_changes"] = changes
+            response["created_revisions"] = [
+                change for change in changes if change["revision_id"] is not None
+            ]
+            self.session.execute(text("""
+                UPDATE trainer.commit_results SET result_payload=CAST(:payload AS jsonb)
+                WHERE commit_result_id=:result
+            """), {"payload": json.dumps(response), "result": commit_result_id})
+        elif "plan_lifecycle" in typed:
             self._commit_plan_lifecycle(typed, confirmation_id, commit_result_id, changes, now)
         elif "publication_source" in typed:
             self._commit_program(typed, confirmation_id, commit_result_id, changes, now)
@@ -9447,6 +9535,7 @@ class ContextDatabaseExecutor:
             "create_familiar_exercise_batch_draft": "CMD-25",
             "create_plan_draft": "CMD-05",
             "create_workout_report_draft": "CMD-06",
+            "create_workout_import_batch_draft": "CMD-26",
             "create_correction_draft": "CMD-07",
             "create_record_decision_draft": "CMD-08",
             "create_historical_record_draft": "CMD-24",

@@ -501,7 +501,7 @@ def test_d_g02_openapi_is_exact_for_all_requests_responses_and_errors() -> None:
             {"context", "intent", "goal", "request_digest"},
         ),
         "PreviewRequest": (
-            {"context", "revision_id", "detail_level", "entry_name", "request_digest"},
+            {"context", "revision_id", "detail_level", "entry_name", "entry_key", "request_digest"},
             {"context", "revision_id", "detail_level", "request_digest"},
         ),
         "PreviewShownRequest": (

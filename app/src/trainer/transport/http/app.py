@@ -36,6 +36,7 @@ from trainer.transport.http.contracts import (
     FieldError,
     ExerciseCatalogDraftRequest,
     FamiliarExerciseBatchDraftRequest,
+    WorkoutImportBatchDraftRequest,
     ExerciseExactResponse,
     ExerciseQueryRequest,
     ExerciseSearchResponse,
@@ -329,6 +330,7 @@ def create_app(
             "/api/v1/commands/program-publication-drafts": "CMD-04",
             "/api/v1/commands/plan-drafts": "CMD-05",
             "/api/v1/commands/workout-report-drafts": "CMD-06",
+            "/api/v1/commands/workout-import-batches": "CMD-26",
             "/api/v1/commands/correction-drafts": "CMD-07",
             "/api/v1/commands/plan-lifecycle-drafts": "CMD-23",
             "/api/v1/commands/previews": "CMD-20",
@@ -961,6 +963,28 @@ def create_app(
         )
 
     @app.post(
+        "/api/v1/commands/workout-import-batches",
+        response_model=DataEnvelope[DraftResult],
+        responses=DOMAIN_ERROR_RESPONSES,
+    )
+    def workout_import_batch_draft(
+        body: WorkoutImportBatchDraftRequest,
+        request: Request,
+        idempotency_key: str = Header(alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        payload = body.model_dump(mode="json", exclude={"draft_id", "expected_revision_id"})
+        if body.draft_id is not None:
+            payload["draft_id"] = str(body.draft_id)
+            payload["expected_revision_id"] = str(body.expected_revision_id)
+        service = require_context_service()
+        service.verify_digest(payload, body.request_digest)
+        return envelope(service.execute(
+            "create_workout_import_batch_draft", payload=payload, key=idempotency_key,
+            correlation_id=request.state.correlation_id,
+            causation_id=request.state.causation_id,
+        ), request)
+
+    @app.post(
         "/api/v1/commands/correction-drafts",
         response_model=DataEnvelope[DraftResult],
         responses=DOMAIN_ERROR_RESPONSES,
@@ -1101,9 +1125,11 @@ def create_app(
         request: Request,
         idempotency_key: str = Header(alias="Idempotency-Key"),
     ) -> dict[str, Any]:
-        payload = body.model_dump(mode="json", exclude={"entry_name"})
+        payload = body.model_dump(mode="json", exclude={"entry_name", "entry_key"})
         if body.entry_name is not None:
             payload["entry_name"] = body.entry_name
+        if body.entry_key is not None:
+            payload["entry_key"] = body.entry_key
         service = require_context_service()
         service.verify_digest(payload, body.request_digest)
         return envelope(

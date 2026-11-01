@@ -52,6 +52,22 @@ class FamiliarExerciseBatchItem(ClosedModel):
         return self
 
 
+class WorkoutImportFactSource(ClosedModel):
+    field_path: str = Field(min_length=1, max_length=300)
+    source_locator: str = Field(min_length=1, max_length=500)
+    source_excerpt: str = Field(min_length=1, max_length=1000)
+
+
+class WorkoutImportBatchEntry(ClosedModel):
+    entry_key: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=200)
+    local_start_date: date | None = None
+    decision: Literal["create", "correct", "exclude", "unresolved"]
+    report_draft_revision_id: UUID | None = None
+    reason: str | None = None
+    fact_sources: list[WorkoutImportFactSource] = Field(default_factory=list, max_length=500)
+
+
 class GoalInput(ClosedModel):
     goal_id: UUID | None = None
     parent_goal_id: UUID | None = None

@@ -1023,6 +1023,56 @@ class WorkoutReportDraftRequest(ClosedModel):
     report: WorkoutReportInput
 
 
+class WorkoutImportFactSource(ClosedModel):
+    field_path: str = Field(min_length=1, max_length=300)
+    source_locator: str = Field(min_length=1, max_length=500)
+    source_excerpt: str = Field(min_length=1, max_length=1000)
+
+
+class WorkoutImportBatchEntry(ClosedModel):
+    entry_key: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=200)
+    local_start_date: date | None = None
+    decision: Literal["create", "correct", "exclude", "unresolved"]
+    report_draft_revision_id: UUID | None = None
+    reason: str | None = Field(default=None, max_length=1000)
+    fact_sources: list[WorkoutImportFactSource] = Field(default_factory=list, max_length=500)
+
+    @model_validator(mode="after")
+    def validate_decision(self) -> WorkoutImportBatchEntry:
+        included = self.decision in {"create", "correct"}
+        if included != (self.report_draft_revision_id is not None):
+            raise ValueError("included workouts require one report draft revision")
+        if included and self.local_start_date is None:
+            raise ValueError("included workouts require an exact date")
+        if not self.fact_sources:
+            raise ValueError("every source record requires a source locator")
+        if self.decision in {"exclude", "unresolved", "correct"} and not self.reason:
+            raise ValueError("exclude, unresolved and correct require a reason")
+        return self
+
+
+class WorkoutImportBatchDraftRequest(ClosedModel):
+    context: RequestContext
+    profile_id: UUID
+    expected_profile_revision_id: UUID
+    part_label: str = Field(min_length=1, max_length=100)
+    entries: list[WorkoutImportBatchEntry] = Field(min_length=1, max_length=20)
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> WorkoutImportBatchDraftRequest:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        if len({item.entry_key for item in self.entries}) != len(self.entries):
+            raise ValueError("entry_key must be unique within a part")
+        if not any(item.decision in {"create", "correct"} for item in self.entries):
+            raise ValueError("part must include at least one workout")
+        return self
+
+
 class WorkoutDraftReplacement(ClosedModel):
     op: Literal["replace"]
     path: Literal["/report"]
@@ -1653,14 +1703,17 @@ class PlanResponse(ClosedModel):
 class PreviewRequest(ClosedModel):
     context: RequestContext
     revision_id: UUID
-    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups"]
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout"]
     entry_name: str | None = Field(default=None, min_length=1, max_length=200)
+    entry_key: str | None = Field(default=None, min_length=1, max_length=100)
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
     @model_validator(mode="after")
     def validate_section_target(self) -> PreviewRequest:
         if (self.detail_level == "exercise") != (self.entry_name is not None):
             raise ValueError("entry_name is required only for exercise detail")
+        if (self.detail_level == "workout") != (self.entry_key is not None):
+            raise ValueError("entry_key is required only for workout detail")
         return self
 
 
