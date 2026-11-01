@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -150,6 +151,23 @@ def verify_postgres_config(
             "local_image_id": image["Id"], "config_bytes_verified": True}
 
 
+def verify_mcp_tool_allowlist() -> None:
+    """Fail a release when a declared MCP method is hidden from trainer chats."""
+    config_path = ROOT.parent / "trainer-workspace/.codex/config.toml"
+    config = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    configured = config["mcp_servers"]["personal-ai-trainer"]["enabled_tools"]
+    sys.path.insert(0, str(ROOT / "mcp"))
+    from trainer_mcp import server
+
+    advertised = {tool.name for tool in asyncio.run(server.mcp.list_tools())}
+    if len(configured) != len(set(configured)) or set(configured) != advertised:
+        raise LifecycleError(
+            "trainer-workspace MCP enabled_tools differs from the server tool catalog: "
+            f"missing={sorted(advertised - set(configured))} "
+            f"unknown={sorted(set(configured) - advertised)}"
+        )
+
+
 def main() -> None:
     if sys.version_info[:3] != (3, 12, 14):
         raise LifecycleError("release builder requires CPython 3.12.14")
@@ -158,6 +176,7 @@ def main() -> None:
     from trainer.lifecycle.release import ReleaseWorkspaceLifecycleManager
     manager = ReleaseWorkspaceLifecycleManager(ROOT)
     manager._validate_workspace(require_environment=False)
+    verify_mcp_tool_allowlist()
     verify_wheelhouse()
     manager._validate_docker_endpoint()
     run([sys.executable, "-B", "distribution-draft/verify_release_inputs.py"])

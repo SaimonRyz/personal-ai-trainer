@@ -15,8 +15,8 @@
       "sha256": "8c376cd4499d6b1311e15e23e502645e706219b205d2c86bba6b160c08192af3"
     },
     "DEVELOPMENT.md": {
-      "size": 3377,
-      "sha256": "3894a128a8c80600ab10eee7c71732b7459ce7d6acbb120c6bc7f17f7cba5001"
+      "size": 4020,
+      "sha256": "2fd89ce66acf9dcffa4492f1f3c5042ab4c563f245783ffff8fef70e82a05acd"
     },
     "FAMILIAR_EXERCISE_BATCH.md": {
       "size": 7754,
@@ -111,8 +111,8 @@
       "sha256": "157bc9194a58936a488f46f6e2141ba27ab2283dd6941cfad8bb972a22f60027"
     },
     "app/distribution-draft/build_release.py": {
-      "size": 11796,
-      "sha256": "7f4d8a0bb5dbd096ea94080e51a56d6d1e4a30eadcfb82d2dc81fcbe4e14432d"
+      "size": 12677,
+      "sha256": "e10a02644a670513a7f079716496dbc23984e93a48e9f017d1a31975296198b7"
     },
     "app/distribution-draft/plan_release_inputs.py": {
       "size": 8710,
@@ -783,8 +783,8 @@
       "sha256": "d48cba8baedadadd6709014ffe20bf4949afb10071d3681b01fa25c834c924bf"
     },
     "app/tests/mcp/test_server_contract.py": {
-      "size": 42623,
-      "sha256": "d9ffdfdd627ec876d289edaf731113f56c88d662c0024f8d9586bdf7184de217"
+      "size": 42671,
+      "sha256": "87f3f0b0fdac3a823648424f2556a16799f03f95e17f9a60aa9479fa11f4e7a1"
     },
     "app/tests/mcp/test_workout_correction_tool.py": {
       "size": 6497,
@@ -1003,8 +1003,8 @@
       "sha256": "f7ec1927de21e2f4cb4f466278b38baebd77e14dce9bdecdd69fa5fe542028f3"
     },
     "trainer-workspace/README.md": {
-      "size": 3425,
-      "sha256": "c089d28cf4119c38cfd6cdd672b6928b79f110acce0f35270967534a4495801e"
+      "size": 4123,
+      "sha256": "169fe2bdb4bd144c7dfefb7d0027bfb672386af5b345c01280e61673dc3903dd"
     }
   }
 }

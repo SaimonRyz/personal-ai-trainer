@@ -50,6 +50,7 @@ def test_active_tool_catalog_is_closed_and_contains_no_fixture_tools() -> None:
         "confirm_preview",
         "calculate_metric",
         "create_exercise_draft",
+        "create_familiar_exercise_batch_draft",
         "create_evidence_draft",
         "create_goal_draft",
         "create_inventory_change_draft",
