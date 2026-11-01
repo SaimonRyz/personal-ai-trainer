@@ -4471,9 +4471,9 @@ class ContextRepository:
                 {"revision": row["draft_revision_id"]},
             ).mappings()
         ]
-        # Keep the persisted canonical payload untouched, but render the exact
-        # dependency snapshot in the user-visible text so shown/confirm binds to
-        # both domain content and its source basis.
+        # Keep the persisted canonical payload untouched. The preview digest
+        # binds the readable text and the exact dependency snapshot; exercise
+        # previews need not print internal dependency identifiers.
         presentation_payload = {**canonical_payload, "dependencies": dependencies}
         canonical_text = self._render_preview(presentation_payload, detail_level=detail_level)
         gaps = canonical_payload.get("gaps", [])
@@ -8882,53 +8882,130 @@ class ContextRepository:
     @staticmethod
     def _render_preview(payload: dict[str, Any], *, detail_level: str = "full") -> str:
         del detail_level  # Persisted/confirmable previews are always rendered in full.
+        if isinstance(payload.get("exercise"), dict) and "resolved_muscle_roles" in payload:
+            return ContextRepository._render_exercise_preview(payload)
         labels = ContextRepository._preview_known_labels(payload)
-        display_payload = deepcopy(payload)
-        muscle_lines: list[str] = []
-        if isinstance(display_payload.get("exercise"), dict):
-            # These values remain in the canonical payload, but are implementation
-            # details rather than decisions the owner needs to approve.
-            def hide_normalization(value: Any) -> None:
-                if isinstance(value, dict):
-                    value.pop("normalized_name", None)
-                    value.pop("normalization_version", None)
-                    for child in value.values():
-                        hide_normalization(child)
-                elif isinstance(value, list):
-                    for child in value:
-                        hide_normalization(child)
-
-            hide_normalization(display_payload)
-            resolved = display_payload.pop("resolved_muscle_roles", None)
-            if resolved is not None:
-                created = display_payload.pop("created_muscle_groups", [])
-                display_payload["exercise"].pop("muscle_roles", None)
-                if not isinstance(resolved, list) or not isinstance(created, list):
-                    raise ContextRepositoryError(
-                        "incomplete_preview", "exercise muscle roles are incomplete", 400
-                    )
-                created_ids = {group.get("muscle_group_id") for group in created if isinstance(group, dict)}
-                muscle_lines = ["Группы мышц:"]
-                for item in resolved:
-                    group = item.get("muscle_group") if isinstance(item, dict) else None
-                    if not isinstance(group, dict) or not isinstance(group.get("name"), str) or not group["name"].strip():
-                        raise ContextRepositoryError(
-                            "incomplete_preview", "exercise muscle group has no readable name", 400
-                        )
-                    role = ContextRepository._preview_value_label("role", str(item.get("role")))
-                    if role not in {"основная", "дополнительная", "стабилизирующая"}:
-                        raise ContextRepositoryError(
-                            "incomplete_preview", "exercise muscle role is not readable", 400
-                        )
-                    creation = "; новая группа будет создана" if group.get("muscle_group_id") in created_ids else ""
-                    muscle_lines.append(f"  {group['name']} — {role}{creation}")
-        lines = ContextRepository._preview_text(display_payload, root=payload, known_labels=labels)
-        lines.extend(muscle_lines)
+        lines = ContextRepository._preview_text(payload, root=payload, known_labels=labels)
         if not lines:
             raise ContextRepositoryError(
                 "incomplete_preview", "preview has no user-readable domain content", 400
             )
         return ContextRepository._preview_heading(payload) + "\n" + "\n".join(lines)
+
+    @staticmethod
+    def _render_exercise_preview(payload: dict[str, Any]) -> str:
+        """Describe the entire exercise decision without exposing transport metadata."""
+        exercise = payload["exercise"]
+        intent = payload.get("intent")
+        resolved = payload["resolved_muscle_roles"]
+        created = payload.get("created_muscle_groups")
+        if intent not in {"create", "correct"} or not isinstance(resolved, list) or not isinstance(created, list):
+            raise ContextRepositoryError("incomplete_preview", "exercise preview is incomplete", 400)
+
+        def required_label(key: str, value: Any) -> str:
+            if not isinstance(value, str) or not value.strip():
+                raise ContextRepositoryError("incomplete_preview", f"exercise {key} is unreadable", 400)
+            return ContextRepository._preview_value_label(key, value.strip())
+
+        if any(
+            not isinstance(group, dict)
+            or not isinstance(group.get("muscle_group_id"), str)
+            or not isinstance(group.get("name"), str)
+            for group in created
+        ):
+            raise ContextRepositoryError("incomplete_preview", "new muscle group is incomplete", 400)
+        created_ids = {group["muscle_group_id"] for group in created}
+        resolved_ids = {
+            item.get("muscle_group", {}).get("muscle_group_id")
+            for item in resolved if isinstance(item, dict) and isinstance(item.get("muscle_group"), dict)
+        }
+        if not created_ids <= resolved_ids:
+            raise ContextRepositoryError("incomplete_preview", "new muscle group has no exercise role", 400)
+
+        def snapshot(card: dict[str, Any], roles: list[dict[str, Any]], *, new_groups: bool) -> list[str]:
+            name = card.get("canonical_name")
+            if not isinstance(name, str) or not name.strip():
+                raise ContextRepositoryError("incomplete_preview", "exercise name is unreadable", 400)
+            if not isinstance(card.get("unilateral"), bool):
+                raise ContextRepositoryError("incomplete_preview", "exercise sidedness is missing", 400)
+            lines = [
+                f"Название: {name.strip()}",
+                f"Категория: {required_label('category_code', card.get('category_code'))}",
+                f"Статус в каталоге: {required_label('status_code', card.get('status_code'))}",
+                f"Одностороннее упражнение: {'да' if card.get('unilateral') is True else 'нет'}",
+            ]
+            measurements = card.get("measurements")
+            requirements = card.get("equipment_requirements")
+            aliases = card.get("aliases")
+            if not all(isinstance(items, list) for items in (measurements, requirements, aliases)):
+                raise ContextRepositoryError("incomplete_preview", "exercise fields are incomplete", 400)
+            lines.append("Измерения:")
+            for item in measurements:
+                lines.append(
+                    f"  • {required_label('metric_kind', item.get('metric_kind'))} — "
+                    f"{required_label('requiredness', item.get('requiredness'))}; "
+                    f"единица: {required_label('unit_family', item.get('unit_family'))}"
+                )
+            lines.append("Оборудование:" if requirements else "Оборудование: не требуется")
+            for item in requirements:
+                alternative = item.get("alternative_group")
+                group = (
+                    f"; группа альтернатив: {required_label('alternative_group', alternative)}"
+                    if alternative else ""
+                )
+                lines.append(
+                    f"  • {required_label('equipment_type', item.get('equipment_type'))} — "
+                    f"{required_label('optionality', item.get('optionality'))}{group}"
+                )
+            lines.append("Группы мышц:")
+            for item in roles:
+                group = item.get("muscle_group") if isinstance(item, dict) else None
+                if not isinstance(group, dict):
+                    raise ContextRepositoryError("incomplete_preview", "exercise muscle group is missing", 400)
+                name = group.get("name")
+                if not isinstance(name, str) or not name.strip():
+                    raise ContextRepositoryError("incomplete_preview", "exercise muscle group has no name", 400)
+                creation = "; будет создана новая группа" if new_groups and group.get("muscle_group_id") in created_ids else ""
+                lines.append(f"  • {name.strip()} — {required_label('role', item.get('role'))}{creation}")
+            lines.append("Другие названия:" if aliases else "Другие названия: нет")
+            for alias in aliases:
+                details = []
+                if alias.get("locale"):
+                    details.append(f"язык: {required_label('locale', alias['locale'])}")
+                if alias.get("context"):
+                    details.append(f"контекст: {alias['context']}")
+                suffix = f" ({'; '.join(details)})" if details else ""
+                lines.append(f"  • {required_label('alias', alias.get('alias'))}{suffix}")
+            missing = []
+            for key, label in (("description", "описание"), ("comment", "комментарий")):
+                value = card.get(key)
+                if value is None or value == "":
+                    missing.append(label)
+                else:
+                    lines.append(f"{label.capitalize()}: {value}")
+            if missing:
+                lines.append("Не указаны: " + ", ".join(missing) + ".")
+            return lines
+
+        name = required_label("canonical_name", exercise.get("canonical_name"))
+        if intent == "create":
+            lines = [f"Создать упражнение «{name}»?", "После подтверждения карточка будет добавлена в каталог."]
+        else:
+            before = payload.get("before")
+            if not isinstance(before, dict) or not isinstance(before.get("muscle_roles"), list):
+                raise ContextRepositoryError("incomplete_preview", "previous exercise state is missing", 400)
+            lines = [f"Исправить упражнение «{name}»?", "После подтверждения карточка будет обновлена.", "Было:"]
+            lines.extend("  " + line for line in snapshot(before, before["muscle_roles"], new_groups=False))
+            lines.append("Станет:")
+        current = snapshot(exercise, resolved, new_groups=True)
+        lines.extend(("  " + line for line in current) if intent == "correct" else current)
+        reason = payload.get("reason")
+        if reason:
+            lines.append(f"Причина изменения: {reason}")
+        elif intent == "create":
+            lines.append("Причина создания не указана.")
+        lines.append("Изменения пока не сохранены.")
+        return "\n".join(lines)
 
 
 class ContextDatabaseExecutor:

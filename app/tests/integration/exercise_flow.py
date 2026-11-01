@@ -411,8 +411,8 @@ def main() -> None:
     assert not old["current"] and old["aggregate"]["aliases"][0]["alias"] == "жим штанги"
     assert second_preview["canonical_payload"]["before"]["aliases"][0]["alias"] == ("жим штанги")
     corrected_text = second_preview["canonical_text"]
-    assert corrected_text.startswith("Полное описание упражнения\n")
-    assert "Текущее состояние" in corrected_text
+    assert corrected_text.startswith("Исправить упражнение «Жим лёжа»?\n")
+    assert "Было:" in corrected_text and "Станет:" in corrected_text
     assert "жим штанги" in corrected_text
     assert "классический жим" in corrected_text
     assert exercise_ref["object_id"] not in corrected_text

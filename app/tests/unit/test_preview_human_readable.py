@@ -283,8 +283,14 @@ def test_exercise_preview_shows_resolved_muscles_once_without_internal_fields() 
             "normalized_name": "жим штанги лежа",
             "normalization_version": "exercise-name-v1",
             "category_code": "strength",
+            "status_code": "active",
+            "unilateral": False,
+            "description": None,
+            "comment": None,
+            "aliases": [],
             "muscle_roles": [{"kind": "create_by_name", "name": "Грудные мышцы", "role": "primary"}],
             "measurements": [{"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}],
+            "equipment_requirements": [{"equipment_type": "barbell", "optionality": "required", "alternative_group": None}],
         },
         "resolved_muscle_roles": [{"muscle_group": {
             "muscle_group_id": "group-1", "name": "Грудные мышцы",
@@ -303,14 +309,46 @@ def test_exercise_preview_shows_resolved_muscles_once_without_internal_fields() 
 
     rendered = ContextRepository._render_preview(payload)
 
-    assert "Грудные мышцы — основная; новая группа будет создана" in rendered
+    assert "Создать упражнение «Жим штанги лёжа»?" in rendered
+    assert "Грудные мышцы — основная; будет создана новая группа" in rendered
     assert rendered.count("Грудные мышцы") == 1
-    assert "Показатель: повторения" in rendered
-    assert "правила каталога и сопоставления названий упражнений" in rendered
-    assert "проверка уникальности названия среди активных упражнений" in rendered
-    for fragment in ("Normalization version", "Normalized name", "Resolved muscle roles", "Muscle group:", "exercise-name-v1", "catalog and normalization rules", "active normalized exercise name"):
+    assert "повторения — обязательное; единица: количество" in rendered
+    assert "штанга — обязательное" in rendered
+    assert "Не указаны: описание, комментарий." in rendered
+    for fragment in ("Normalization version", "Normalized name", "Resolved muscle roles", "Muscle group:", "exercise-name-v1", "catalog and normalization rules", "active normalized exercise name", "Основания и зависимости", "служебные ID", "digest"):
         assert fragment not in rendered
     assert payload == original
+
+
+def test_exercise_correction_preview_shows_complete_before_and_after() -> None:
+    before = {
+        "canonical_name": "Подтягивания",
+        "category_code": "strength", "status_code": "active", "unilateral": False,
+        "description": None, "comment": None, "aliases": [],
+        "measurements": [{"metric_kind": "repetitions", "requiredness": "required", "unit_family": "count"}],
+        "equipment_requirements": [{"equipment_type": "pull_up_bar", "optionality": "required", "alternative_group": None}],
+        "muscle_roles": [{"muscle_group": {"muscle_group_id": "old", "name": "Спина"}, "role": "primary"}],
+    }
+    after = {**before, "canonical_name": "Подтягивания широким хватом", "description": "Широкий хват"}
+    rendered = ContextRepository._render_preview({
+        "intent": "correct", "exercise": after, "before": before,
+        "resolved_muscle_roles": [
+            {"muscle_group": {"muscle_group_id": "old", "name": "Спина"}, "role": "primary"},
+            {"muscle_group": {"muscle_group_id": "new", "name": "Бицепс"}, "role": "secondary"},
+        ],
+        "created_muscle_groups": [{"muscle_group_id": "new", "name": "Бицепс"}],
+        "reason": "Уточнил название",
+        "dependencies": [{"dependency_type": "exercise", "reason": "current exercise"}],
+    })
+
+    assert "Исправить упражнение «Подтягивания широким хватом»?" in rendered
+    assert "Было:\n  Название: Подтягивания" in rendered
+    assert "Станет:\n  Название: Подтягивания широким хватом" in rendered
+    assert "Описание: Широкий хват" in rendered
+    assert "Причина изменения: Уточнил название" in rendered
+    assert "Спина — основная" in rendered
+    assert "Бицепс — дополнительная; будет создана новая группа" in rendered
+    assert "Основания и зависимости" not in rendered
 
 
 def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_empty_lists() -> None:
