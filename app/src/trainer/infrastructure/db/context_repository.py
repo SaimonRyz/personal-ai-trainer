@@ -8797,6 +8797,7 @@ class ContextRepository:
                 "weight_plate": "диск для штанги",
                 "bench": "скамья",
                 "pull_up_bar": "турник",
+                "parallel_bars": "брусья",
                 "resistance_band": "резиновая лента",
                 "hyperextension_bench": "скамья для гиперэкстензии",
                 "push_up_handles": "упоры для отжиманий",

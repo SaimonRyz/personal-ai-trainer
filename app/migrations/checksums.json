@@ -21,5 +21,6 @@
   "0020_h03_exercise_category_seed.py": "4b535b9bc5878424cbed1ce7283465dffef4a7069688e20ca925f8cff3f0645f",
   "0021_evidence_source_availability.py": "09a15641bf8bc50b4d5a968be9891a6a65c7e5c1f60ce06b5d0d3d3cb9cc61ea",
   "0022_profile_familiar_exercises.py": "97c70674144dfd937db0877a2c0537480a7f89401ebba910a6db5921f6e378d7",
-  "0023_familiar_exercise_batch.py": "82295e80cb53fffef89098c19ba1f4a9ee079a6947f134ff51320707d2185e81"
+  "0023_familiar_exercise_batch.py": "82295e80cb53fffef89098c19ba1f4a9ee079a6947f134ff51320707d2185e81",
+  "0024_parallel_bars_equipment.py": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2"
 }

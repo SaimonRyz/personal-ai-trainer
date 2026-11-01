@@ -19,8 +19,8 @@
       "sha256": "3894a128a8c80600ab10eee7c71732b7459ce7d6acbb120c6bc7f17f7cba5001"
     },
     "FAMILIAR_EXERCISE_BATCH.md": {
-      "size": 7949,
-      "sha256": "d91133ab949af994cdd2141cea7c25fa039e587a4c346462bf99183ab32c4620"
+      "size": 7754,
+      "sha256": "f785b5585278a890a64b9bcfabbe4af3ec9e0bd243a928d9c2deccecb5d5e9b3"
     },
     "KNOWN_ISSUES.md": {
       "size": 2315,
@@ -171,8 +171,8 @@
       "sha256": "6f56be871d12ac204a291292b92eabf856305fd35d0d5a1a00671e97455a2c51"
     },
     "app/mcp/trainer_mcp/contracts.py": {
-      "size": 42253,
-      "sha256": "8b315dca9e46e39b4fd179230b4cfb1f17d365487c0ffd71f8203081031379d6"
+      "size": 42295,
+      "sha256": "3045c8a5367c1ae73e68035be583280886bf8a0d1198eb13e7fbabb92c9b75d5"
     },
     "app/mcp/trainer_mcp/read_tools.py": {
       "size": 4017,
@@ -187,8 +187,8 @@
       "sha256": "951b7ae04cb6a249bd8a153a81d6dcc04a671ad793e781f2c416a0f838294897"
     },
     "app/migrations/checksums.json": {
-      "size": 2337,
-      "sha256": "0cfc09b8523708d83d8f99ebcb0082adc99ba07b80de2280391482c1e96f4b36"
+      "size": 2442,
+      "sha256": "268fea59b26e0df9034b0c0fea6366c8138cadff684ae912f21bd0047cb39081"
     },
     "app/migrations/env.py": {
       "size": 1612,
@@ -290,6 +290,10 @@
       "size": 1428,
       "sha256": "82295e80cb53fffef89098c19ba1f4a9ee079a6947f134ff51320707d2185e81"
     },
+    "app/migrations/versions/0024_parallel_bars_equipment.py": {
+      "size": 1389,
+      "sha256": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2"
+    },
     "app/migrations/versions/__init__.py": {
       "size": 46,
       "sha256": "5de5b66d2dba6533a199d597295ffec6cdbc6a5070d381b624971a96d0d45a09"
@@ -343,8 +347,8 @@
       "sha256": "d3236399c60139a5ecda2f9bd625f9d18b1223240bb4b2829952cefaa0a7511c"
     },
     "app/src/trainer/domain/inventory.py": {
-      "size": 5587,
-      "sha256": "285e62eca00466000052731b69e796a4aca18fc8f7ce20c2b041cd833e18b515"
+      "size": 5608,
+      "sha256": "8e936224061d433ac531e1999400de04675c78c185df5e9e86e0295ccf28668a"
     },
     "app/src/trainer/domain/inventory_snapshots.py": {
       "size": 3186,
@@ -407,8 +411,8 @@
       "sha256": "a2a7cf0a8a3a59eede1826f261fa720da170b9b19e6a0daae7309bef7649bc58"
     },
     "app/src/trainer/infrastructure/db/context_repository.py": {
-      "size": 427604,
-      "sha256": "e2f7c463adc8a3a362b830f2f63acfb457e12e5915880011b952a11e4b647848"
+      "size": 427653,
+      "sha256": "aa7d49a07444de2933d7bd617b66ad8929012b36ef14a5576c65bce12c7b5bea"
     },
     "app/src/trainer/infrastructure/db/engine.py": {
       "size": 532,
@@ -431,8 +435,8 @@
       "sha256": "a281f2768b4c0ed9729ede0a3ae7ee6a2d35ad4e73f301a7eb95add5408fa004"
     },
     "app/src/trainer/infrastructure/db/migrator.py": {
-      "size": 12974,
-      "sha256": "34c1d96a6dd8cae822b80fb4fac443788af9556f056b7757a055804e555734f5"
+      "size": 13159,
+      "sha256": "4ded8323db5a8cbde96f2edd05c4dda5b4b8d64911b015e680f1bb4679cdda1a"
     },
     "app/src/trainer/infrastructure/db/operations.py": {
       "size": 3326,
@@ -531,8 +535,8 @@
       "sha256": "0f951a431804d1b3ef4fd24c0ab7298cfd64d03d37a207e04337492cef670641"
     },
     "app/src/trainer/transport/http/inventory_types.py": {
-      "size": 2213,
-      "sha256": "b1efd413bead51d1bb7bf0cabba5151c8c70db416a2f14f7cfa01a4c80a0fc8b"
+      "size": 2255,
+      "sha256": "8907cf0c0fa7cbf851f66e0817c9047698e35b6ca14f1a121f1088b7dda71ce8"
     },
     "app/src/trainer/transport/http/measurement_contracts.py": {
       "size": 6619,
@@ -627,8 +631,8 @@
       "sha256": "23a4a16bb76862b0a767f2dd1bf79b6b9d3b8e786430ee2f0a55bf7914d6f7d8"
     },
     "app/tests/integration/exercise_flow.py": {
-      "size": 23537,
-      "sha256": "43cbfb7aa15c68f5e07703903c98eb1cb28854c0188be233d91e5a0f1c58efe2"
+      "size": 24223,
+      "sha256": "53b99ca4752da6b1aba69c6017aa522376a66ec48a553624454e594b6e959847"
     },
     "app/tests/integration/f_g04_mcp_domain.py": {
       "size": 10120,
@@ -935,8 +939,8 @@
       "sha256": "62ef6e1a6a09f6e18b1f66fd112913a2e865272b7cac9dc31ac3c2de670d4f51"
     },
     "app/tests/unit/test_migrator.py": {
-      "size": 2459,
-      "sha256": "e9454dfb6ae70c60c45aecda6042f561fb09570eb7fc38e41e782ce3272e4861"
+      "size": 2496,
+      "sha256": "2b57051c50a1fff32c453334a40bd2f12425847d8c3f5467cd38a23c7f510877"
     },
     "app/tests/unit/test_plan_domain.py": {
       "size": 6152,

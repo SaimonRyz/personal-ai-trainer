@@ -38,14 +38,15 @@ def test_migration_manifest_is_ordered_and_checksums_are_canonical() -> None:
         "0021_source_availability",
         "0022_profile_familiar_exercises",
         "0023_familiar_exercise_batch",
+        "0024_parallel_bars_equipment",
     ]
     assert all(len(item.checksum) == 64 for item in MIGRATIONS)
     assert MIGRATIONS[-1].checksum == (
-        "d6f884130b50a2f750ab92f02ea7d5944fa92ca09d4ccbb239a73267abca319d"
+        "6df12136df187dd34a41252318f3fd9468a009c691af89c10da07905da998bf1"
     )
-    assert MIGRATIONS[-2].revision == "0022_profile_familiar_exercises"
+    assert MIGRATIONS[-2].revision == "0023_familiar_exercise_batch"
     assert all(len(item.revision) <= 32 for item in MIGRATIONS)
-    assert MIGRATIONS[-1].revision == "0023_familiar_exercise_batch"
+    assert MIGRATIONS[-1].revision == "0024_parallel_bars_equipment"
 
 
 def test_pending_migrations_continue_after_active_revision() -> None:

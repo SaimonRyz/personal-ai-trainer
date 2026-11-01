@@ -15,6 +15,7 @@ PLANNING_EQUIPMENT_TYPES = (
     "weight_plate",
     "bench",
     "pull_up_bar",
+    "parallel_bars",
     "resistance_band",
     "hyperextension_bench",
     "push_up_handles",

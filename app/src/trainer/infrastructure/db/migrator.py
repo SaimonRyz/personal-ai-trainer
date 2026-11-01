@@ -146,6 +146,11 @@ MIGRATIONS = (
         "d6f884130b50a2f750ab92f02ea7d5944fa92ca09d4ccbb239a73267abca319d",
         "0023_familiar_exercise_batch.py",
     ),
+    MigrationSpec(
+        "0024_parallel_bars_equipment",
+        "6df12136df187dd34a41252318f3fd9468a009c691af89c10da07905da998bf1",
+        "0024_parallel_bars_equipment.py",
+    ),
 )
 
 

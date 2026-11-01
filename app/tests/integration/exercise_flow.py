@@ -250,6 +250,23 @@ def main() -> None:
     )["data"]
     assert [item["name"] for item in search["items"]] == ["Жим лёжа"]
 
+    bars = exercise("Синтетические отжимания на брусьях", alias="синтетические брусья")
+    bars["equipment_requirements"] = [
+        {"equipment_type": "parallel_bars", "optionality": "required", "alternative_group": None}
+    ]
+    bars_draft = post(
+        "/api/v1/commands/exercise-catalog-drafts",
+        {
+            "context": context("parallel-bars-draft"),
+            "intent": "create",
+            "exercise": bars,
+            "expected_revision_id": None,
+            "reason": None,
+        },
+        key="parallel-bars-draft",
+    )
+    assert bars_draft["data"]["draft_id"] and bars_draft["data"]["revision_id"]
+
     approved_measurements = [
         ("repetitions", "required", "count"),
         ("repetitions", "optional", "count"),
@@ -296,7 +313,7 @@ def main() -> None:
             "reason": None,
         },
         key="incompatible-measurement",
-        expected=400,
+        expected=422,
     )
     assert incompatible_error["error"]["code"] == "validation_error"
 
