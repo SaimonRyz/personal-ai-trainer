@@ -358,14 +358,31 @@ def create_app(
             logger.warning("failed_request_audit_unavailable")
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, _: RequestValidationError) -> JSONResponse:
+    async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
         correlation_id = getattr(request.state, "correlation_id", uuid4())
         audit_failed_command(request, "validation_error")
+        field_errors = []
+        if request.url.path == "/api/v1/commands/plan-drafts":
+            for item in error.errors():
+                location = item.get("loc", ())
+                if (
+                    len(location) == 4
+                    and location[0] == "body"
+                    and location[1] == "recommendations"
+                    and isinstance(location[2], int)
+                    and location[3] == "recommendation_kind"
+                ):
+                    field_errors.append({
+                        "path": f"recommendations[{location[2]}].recommendation_kind",
+                        "code": "unsupported_value",
+                        "message_safe": "Use plan_structure or exercise_selection",
+                    })
         return error_response(
             status_code=400,
             code="validation_error",
             message="request validation failed",
             correlation_id=correlation_id,
+            field_errors=field_errors,
         )
 
     @app.exception_handler(StarletteHTTPException)

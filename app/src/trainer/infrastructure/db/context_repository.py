@@ -2902,6 +2902,11 @@ class ContextRepository:
                     f"recommendations[{index}].recommendation_kind must be "
                     "plan_structure or exercise_selection",
                     422,
+                    field_errors=[{
+                        "path": f"recommendations[{index}].recommendation_kind",
+                        "code": "unsupported_value",
+                        "message_safe": "Use plan_structure or exercise_selection",
+                    }],
                 )
             recommendation["recommendation_id"] = recommendation.get("recommendation_id") or str(
                 uuid4()

@@ -427,8 +427,8 @@
       "sha256": "bcf60ce4b6c1df8faf1a0dd86ee1e7b32161fd10330f90a134a7a40bbb552e0a"
     },
     "app/src/trainer/infrastructure/db/context_repository.py": {
-      "size": 456244,
-      "sha256": "cd49df0bb84af2ec72f7be54fbb2a36b2d455dc6927b7029fd6acf7245da94c5"
+      "size": 456522,
+      "sha256": "10805b1e09bc867757d973f5904d9965c967528c262fd491f0e5f9a42472c515"
     },
     "app/src/trainer/infrastructure/db/engine.py": {
       "size": 532,
@@ -547,8 +547,8 @@
       "sha256": "c660a3b7b8f5c2e857c8a0a25fca47ef29273cad824d6a8a9f650087d55fbf85"
     },
     "app/src/trainer/transport/http/app.py": {
-      "size": 46638,
-      "sha256": "988fa7163e5a9a7972c23b2a20444b882032d4198e2c03a3e16d1e1600191e01"
+      "size": 47442,
+      "sha256": "878135724fbe364316487719aaa3cd9d26e528f21e2f19e2e3c15dd9c7fa9532"
     },
     "app/src/trainer/transport/http/contracts.py": {
       "size": 73699,
@@ -591,8 +591,8 @@
       "sha256": "5b15f998f339067b50a3dae5a37768d37a0865af059dbdf660960a119e908d0a"
     },
     "app/tests/contract/test_http_foundation.py": {
-      "size": 32369,
-      "sha256": "ae6443f565eb515b9045c252fd49e089301fd28aa365f03a66cc0e9ec90ab8de"
+      "size": 33062,
+      "sha256": "6c9c5e81bf9559e431b6b0e2eb77d4e806b57154eb406bbd0072456262a47089"
     },
     "app/tests/contract/test_inventory_http.py": {
       "size": 6553,
