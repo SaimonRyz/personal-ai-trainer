@@ -111,8 +111,8 @@
       "sha256": "157bc9194a58936a488f46f6e2141ba27ab2283dd6941cfad8bb972a22f60027"
     },
     "app/distribution-draft/build_release.py": {
-      "size": 12754,
-      "sha256": "76cec0889c5392692df76e7505a84e238ff583363a93fa4e2b4dd0744133efb9"
+      "size": 12519,
+      "sha256": "d708404cddddfa8eab37e947847aa9d6208e6334a46a9e0a059f79674c07f0a0"
     },
     "app/distribution-draft/plan_release_inputs.py": {
       "size": 8710,
@@ -519,8 +519,8 @@
       "sha256": "803edf6bfbab5d5b9ef27fdd5351bed359896d7d4beb08cd9d26a42ff0757fb9"
     },
     "app/src/trainer/lifecycle/release.py": {
-      "size": 17140,
-      "sha256": "5128b5a3c5be1bd256f57cf3f1ef9619163057012c51dc487362eba64795a819"
+      "size": 17165,
+      "sha256": "50b28d8657400f8ceb9af1bd856b28d23e9778464d5271b2b72aae6406267434"
     },
     "app/src/trainer/lifecycle/synthetic.py": {
       "size": 32791,
@@ -1043,8 +1043,8 @@
       "sha256": "0218a13360da90042e17e9139a61b8b3542edfda3dedc4127154d73a6396a215"
     },
     "app/tests/unit/test_release_profile.py": {
-      "size": 8357,
-      "sha256": "4da9690533253debc5594ff56fdf1b52a2a859dd931fe48b950283d883741a76"
+      "size": 8867,
+      "sha256": "3cb1794f574d362e2d6823c911bdac3a61d001a2e9eea308c49972c65906ed6e"
     },
     "app/tests/unit/test_uow.py": {
       "size": 550,

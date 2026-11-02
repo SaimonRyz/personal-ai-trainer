@@ -22,7 +22,7 @@ sys.path.insert(0, str(ROOT / "distribution-draft"))
 
 from plan_release_inputs import plan as plan_inputs  # noqa: E402
 
-from trainer.lifecycle.release import PROOF, source_files  # noqa: E402
+from trainer.lifecycle.release import PROOF, image_source_files, source_files  # noqa: E402
 from trainer.lifecycle.system import LifecycleError  # noqa: E402
 
 INSPECT = """
@@ -212,10 +212,7 @@ def main() -> None:
                                 "--read-only", "--cap-drop=ALL", "--security-opt",
                                 "no-new-privileges:true", "-i", "--entrypoint", "python",
                                 image_id, "-B", "-"], input=INSPECT))
-    expected_image_files = {n: h for n, h in before.items()
-                            if (n.startswith(("src/", "mcp/", "migrations/"))
-                                and not n.startswith("src/trainer/spike/"))
-                            or n in {"pyproject.toml", "uv.lock", "README.md", "alembic.ini"}}
+    expected_image_files = image_source_files(before)
     lock = tomllib.loads((ROOT / "uv.lock").read_text())
     allowed = {p["name"]: p["version"] for p in lock["package"]}
     for line in (ROOT / "distribution-draft/build-constraints.txt").read_text().splitlines():
