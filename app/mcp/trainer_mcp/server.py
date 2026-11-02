@@ -24,6 +24,7 @@ from trainer_mcp.contracts import (
     PlaceInput,
     PlanTreeInput,
     ProfileInput,
+    ProfileUpdateInput,
     ProgramIdentityInput,
     ProgramRecommendationInput,
     ProgramVersionDraftInput,
@@ -276,9 +277,9 @@ def create_profile_update_draft(
     idempotency_key: IdempotencyKey,
     profile_id: UUID,
     expected_profile_revision_id: UUID,
-    profile: ProfileInput,
+    profile: ProfileUpdateInput,
 ) -> dict[str, Any]:
-    """Replace an existing profile revision. Copy unchanged fields from get_profile_context; birth_date needs the user's exact date, never an age-derived guess."""
+    """Replace an existing profile revision. Supply all seven fields explicitly, copying unchanged values from get_profile_context; null clears a field. Birth date needs the user's exact date, never an age-derived guess."""
     body = {
         "context": context(conversation_id, message_id, timezone),
         "profile_id": str(profile_id),

@@ -34,7 +34,9 @@ def _date(value: str) -> str:
     return f"{day} {MONTHS[month]} {year} года"
 
 
-def _value(value: dict[str, Any], *, details: bool = False) -> str:
+def _value(
+    value: dict[str, Any], *, details: bool = False, previous: bool = False
+) -> str:
     number = f"{value['original_value']} {UNITS[value['original_unit']]}"
     if value.get("side"):
         number = f"{'слева' if value['side'] == 'left' else 'справа'} {number}"
@@ -43,8 +45,10 @@ def _value(value: dict[str, Any], *, details: bool = False) -> str:
         number += f" (способ: {value['method_description']})"
     elif details and method and method["mode"] == "unknown":
         number += " (способ измерения не указан)"
-    elif details and value.get("method_description"):
+    elif value.get("method_description"):
         number += f" (способ: {value['method_description']})"
+    elif previous and value["measurement_kind"] not in {"body_mass", "height"}:
+        number += " (способ измерения не указан)"
     if value.get("comment"):
         number += f" (комментарий: {value['comment']})"
     if details and value.get("normalized_unit") and (
@@ -54,10 +58,14 @@ def _value(value: dict[str, Any], *, details: bool = False) -> str:
     return number
 
 
-def _values(values: list[dict[str, Any]], *, details: bool = False) -> list[str]:
+def _values(
+    values: list[dict[str, Any]], *, details: bool = False, previous: bool = False
+) -> list[str]:
     grouped: dict[str, list[str]] = {}
     for value in values:
-        grouped.setdefault(value["measurement_kind"], []).append(_value(value, details=details))
+        grouped.setdefault(value["measurement_kind"], []).append(
+            _value(value, details=details, previous=previous)
+        )
     return [f"• {KINDS[kind]} — {'; '.join(items)}" for kind, items in grouped.items()]
 
 
@@ -66,23 +74,28 @@ def render(payload: dict[str, Any], *, detail_level: str = "full") -> str:
     correcting = payload["measurement_change"] == "correct"
     action = "Исправить" if correcting else "Сохранить"
     lines = [f"{action} замеры за {_date(after['measured_on'])}?"]
-    if after.get("measured_time"):
-        lines.append(f"Время: {after['measured_time']}.")
-    if after.get("conditions"):
-        lines.append(f"Условия: {after['conditions']}.")
     lines.append("Исправление пока не сохранено." if correcting else "Пока ничего не сохранено.")
     if correcting:
         before = payload["before"]
         lines.extend(["", f"Сейчас записано за {_date(before['measured_on'])}:"])
-        lines.extend(_values(before["values"], details=detail_level != "full"))
+        lines.append(f"Время: {before.get('measured_time') or 'не указано'}.")
+        lines.append(f"Условия: {before.get('conditions') or 'не указаны'}.")
+        lines.append(f"Комментарий сеанса: {before.get('comment') or 'нет'}.")
+        lines.extend(_values(before["values"], details=detail_level != "full", previous=True))
         lines.append("После подтверждения прежняя редакция останется в истории; текущую заменит новая.")
         lines.append(f"Причина исправления: {payload['reason']}.")
         lines.append("Новая редакция:")
     else:
         lines.append("")
+    if correcting or after.get("measured_time"):
+        lines.append(f"Время: {after.get('measured_time') or 'не указано'}.")
+    if correcting or after.get("conditions"):
+        lines.append(f"Условия: {after.get('conditions') or 'не указаны'}.")
     lines.extend(_values(after["values"], details=detail_level != "full"))
     if after.get("comment"):
         lines.extend(["", f"Только в комментарии, без отдельного показателя: {after['comment']}"])
+    elif correcting:
+        lines.append("Комментарий сеанса: нет.")
 
     comparable: list[str] = []
     incomparable: list[str] = []

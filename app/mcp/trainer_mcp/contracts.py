@@ -30,6 +30,16 @@ class ProfileInput(ClosedModel):
     comment: str | None = None
 
 
+class ProfileUpdateInput(ClosedModel):
+    birth_date: date | None
+    sex: Literal["male", "female", "other", "not_stated"] | None
+    timezone: str = Field(min_length=1, max_length=100)
+    started_on: date | None
+    desired_sessions_per_week: int | None = Field(ge=1, le=14)
+    usual_place_id: UUID | None
+    comment: str | None
+
+
 class ExerciseRevisionRef(ClosedModel):
     object_type: Literal["exercise"]
     object_id: UUID

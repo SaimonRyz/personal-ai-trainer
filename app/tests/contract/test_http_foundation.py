@@ -203,6 +203,14 @@ def test_profile_update_http_accepts_exact_date_and_rejects_age_field() -> None:
     assert accepted.status_code == 200
     assert calls[0]["action"] == "create_profile_update_draft"
     assert calls[0]["payload"]["profile"]["birth_date"] == "1999-05-12"
+    omitted = test_client.post(
+        "/api/v1/commands/profile-update-drafts",
+        headers={**required_headers(), "Idempotency-Key": "profile-update-omitted"},
+        json={**body, "profile": {"birth_date": "1999-05-12", "timezone": "Asia/Novokuznetsk"},
+              "request_digest": digest_payload(body)},
+    )
+    assert omitted.status_code == 400
+    assert len(calls) == 1
     rejected = test_client.post(
         "/api/v1/commands/profile-update-drafts",
         headers={**required_headers(), "Idempotency-Key": "profile-update-2"},

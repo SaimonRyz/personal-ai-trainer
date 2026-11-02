@@ -89,6 +89,16 @@ class ProfileInput(ClosedModel):
     comment: str | None = None
 
 
+class ProfileUpdateInput(ClosedModel):
+    birth_date: date | None
+    sex: Literal["male", "female", "other", "not_stated"] | None
+    timezone: str
+    started_on: date | None
+    desired_sessions_per_week: int | None = Field(ge=1, le=14)
+    usual_place_id: UUID | None
+    comment: str | None
+
+
 class FamiliarExerciseRef(ClosedModel):
     object_type: Literal["exercise"]
     object_id: UUID
@@ -159,7 +169,7 @@ class ProfileUpdateDraftRequest(ClosedModel):
     context: RequestContext
     profile_id: UUID
     expected_profile_revision_id: UUID
-    profile: ProfileInput
+    profile: ProfileUpdateInput
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 

@@ -21,6 +21,7 @@ from trainer_mcp.contracts import (
     PlaceInput,
     PlanTreeInput,
     ProfileInput,
+    ProfileUpdateInput,
     ProgramIdentityInput,
     ProgramRecommendationInput,
     ProgramVersionDraftInput,
@@ -338,13 +339,19 @@ def test_profile_update_draft_requires_exact_birth_date_on_wire(
         timezone="Asia/Novokuznetsk", correlation_id=uuid4(),
         causation_id=uuid4(), idempotency_key="profile-update-1",
         profile_id=profile_id, expected_profile_revision_id=revision_id,
-        profile=ProfileInput(timezone="Asia/Novokuznetsk", birth_date=date(1999, 5, 12)),
+        profile=ProfileUpdateInput(
+            timezone="Asia/Novokuznetsk", birth_date=date(1999, 5, 12),
+            sex=None, started_on=None, desired_sessions_per_week=None,
+            usual_place_id=None, comment=None,
+        ),
     )
     assert captured["path"] == "/api/v1/commands/profile-update-drafts"
     assert captured["body"]["profile_id"] == str(profile_id)
     assert captured["body"]["expected_profile_revision_id"] == str(revision_id)
     assert captured["body"]["profile"]["birth_date"] == "1999-05-12"
     _assert_request_digest_and_validate(captured["body"], ProfileUpdateDraftRequest)
+    with pytest.raises(ValidationError):
+        ProfileUpdateInput(timezone="Asia/Novokuznetsk", birth_date=date(1999, 5, 12))
     with pytest.raises(ValidationError):
         ProfileUpdateDraftRequest.model_validate({
             **captured["body"], "request_digest": "0" * 64,

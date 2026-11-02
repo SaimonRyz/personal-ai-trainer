@@ -3598,6 +3598,10 @@ class ContextRepository:
             for field in fields for value in (current[field],)
         }
         after = payload["profile"]
+        if set(after) != set(fields):
+            raise ContextRepositoryError(
+                "validation_error", "profile update requires all profile fields", 422
+            )
         if {key: str(value) for key, value in before.items()} == {
             key: str(value) for key, value in after.items()
         }:

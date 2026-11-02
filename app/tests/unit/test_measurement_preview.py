@@ -79,18 +79,29 @@ def test_correction_preview_shows_before_after_and_changes_with_values() -> None
     payload["measurement_change"] = "correct"
     payload["before"] = {
         "measured_on": "2026-11-01",
+        "measured_time": "07:45:00",
+        "conditions": "Перед завтраком",
+        "comment": "Старый комментарий сеанса",
         "values": [
-            {"measurement_kind": "body_mass", "side": None, "original_value": "70", "original_unit": "kilogram", "comment": None}
+            {"measurement_kind": "body_mass", "side": None, "original_value": "70", "original_unit": "kilogram", "comment": None},
+            {"measurement_kind": "waist_circumference", "side": None, "original_value": "82", "original_unit": "centimeter", "method_description": "Лента на уровне пупка", "comment": "Старая отметка"},
         ],
     }
     payload["reason"] = "Correcting the date and weight"
     text = render(payload)
     assert "Сейчас записано за 1 ноября 2026 года:" in text
+    assert "Время: 07:45:00." in text
+    assert "Условия: Перед завтраком." in text
+    assert "Комментарий сеанса: Старый комментарий сеанса" in text
+    assert "Талия — 82 см (способ: Лента на уровне пупка) (комментарий: Старая отметка)" in text
     assert "Вес — 70 кг" in text and "Вес — 71 кг" in text
     assert "прежняя редакция останется в истории" in text
     changed = deepcopy(payload)
     changed["after"]["values"][0]["original_value"] = "72"
     assert render(changed) != text
+    changed_before = deepcopy(payload)
+    changed_before["before"]["conditions"] = "После завтрака"
+    assert render(changed_before) != text
 
 
 def test_method_change_alters_confirmation_text_and_series_consequence() -> None:
