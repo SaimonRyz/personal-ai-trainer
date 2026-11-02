@@ -258,6 +258,21 @@ class ApiBoundaryMiddleware(BaseHTTPMiddleware):
             )
             return self._complete(request, response, correlation_id, causation_id, started)
 
+        # Content-Length is only a claim. Count streamed bytes before handing the
+        # request to FastAPI, and cache at most the configured limit for replay.
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > self.settings.max_request_bytes:
+                response = error_response(
+                    status_code=413,
+                    code="request_too_large",
+                    message="request exceeds configured limit",
+                    correlation_id=correlation_id,
+                )
+                return self._complete(request, response, correlation_id, causation_id, started)
+            body.extend(chunk)
+        request._body = bytes(body)
+
         downstream_response = await call_next(request)
         return self._complete(request, downstream_response, correlation_id, causation_id, started)
 

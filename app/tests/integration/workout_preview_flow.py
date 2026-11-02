@@ -54,12 +54,13 @@ def actual_set(position: int, mass: str, technique: str) -> dict:
 
 
 def main() -> None:
+    # Fictional training data only; this integration flow never confirms the draft.
     ref = save_exercise_revision(
         name="Синтетический жим для предпросмотра", alias="синтетический жим",
         prefix="workout-preview-exercise", intent="create",
     )
     report = {"plan_id": None, "plan_revision_id": None, "started_at": None,
-              "ended_at": None, "local_start_date": "2026-10-14",
+              "ended_at": None, "local_start_date": "2024-03-07",
               "duration_seconds": None, "session_type": "training", "name": None,
               "lifecycle": "completed", "effort": None, "comment": None,
               "workout_metrics": [], "confirmed_unknown_planned_exercise_ids": [],
@@ -71,8 +72,8 @@ def main() -> None:
                   "exercises": [{"position": 1, "exercise_id": ref["object_id"],
                                  "planned_exercise_id": None, "result": "added",
                                  "replacement_source": None, "reason": None,
-                                 "sets": [actual_set(1, "85", "строго"),
-                                          actual_set(2, "87", "отличалась техника")] }],
+                                 "sets": [actual_set(1, "62", "ровно"),
+                                          actual_set(2, "64", "темп изменился")] }],
               }]}
     draft = post("/api/v1/commands/workout-report-drafts", {
         "context": context("draft"), "report": report,
@@ -83,10 +84,10 @@ def main() -> None:
     }, PreviewRequest, "workout-preview-full")
     text = preview["canonical_text"]
     assert preview["complete"] is True
-    assert "Сохранить тренировку за 14.10.2026?" in text
+    assert "Сохранить тренировку за 07.03.2024?" in text
     assert "Синтетический жим для предпросмотра" in text
-    assert "85 кг" in text and "87 кг" in text
-    assert "строго" in text and "отличалась техника" in text
+    assert "62 кг" in text and "64 кг" in text
+    assert "ровно" in text and "темп изменился" in text
     assert "Block type code" not in text and "Mass meaning" not in text
     assert "profile timezone for workout local date" not in text
     print("PASS: readable synthetic workout report preview; report not confirmed")

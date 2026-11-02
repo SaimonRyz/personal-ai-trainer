@@ -342,6 +342,31 @@ def test_invalid_correlation_and_oversized_request_fail_safely() -> None:
     assert oversized.json()["error"]["code"] == "request_too_large"
 
 
+@pytest.mark.parametrize("declared_length", [None, "1"])
+def test_streamed_body_limit_uses_actual_bytes(declared_length: str | None) -> None:
+    settings = Settings(api_token=SecretStr(TEST_TOKEN), max_request_bytes=1024)
+    headers = required_headers()
+    if declared_length is not None:
+        headers["Content-Length"] = declared_length
+    response = TestClient(create_app(settings), raise_server_exceptions=False).post(
+        "/api/v1/not-a-route",
+        content=iter([b"a" * 700, b"b" * 700]),
+        headers=headers,
+    )
+    assert response.status_code == 413
+    assert response.json()["error"]["code"] == "request_too_large"
+
+
+def test_streamed_body_at_limit_reaches_route() -> None:
+    settings = Settings(api_token=SecretStr(TEST_TOKEN), max_request_bytes=1024)
+    response = TestClient(create_app(settings), raise_server_exceptions=False).post(
+        "/api/v1/not-a-route",
+        content=iter([b"a" * 512, b"b" * 512]),
+        headers=required_headers(),
+    )
+    assert response.status_code == 404
+
+
 def test_api_v1_requires_media_and_both_trace_headers() -> None:
     base = {"Authorization": f"Bearer {TEST_TOKEN}"}
     assert client().post("/api/v1/not-a-route", headers=base).status_code == 406

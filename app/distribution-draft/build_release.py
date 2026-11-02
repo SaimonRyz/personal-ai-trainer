@@ -213,7 +213,8 @@ def main() -> None:
                                 "no-new-privileges:true", "-i", "--entrypoint", "python",
                                 image_id, "-B", "-"], input=INSPECT))
     expected_image_files = {n: h for n, h in before.items()
-                            if n.startswith(("src/", "mcp/", "migrations/"))
+                            if (n.startswith(("src/", "mcp/", "migrations/"))
+                                and not n.startswith("src/trainer/spike/"))
                             or n in {"pyproject.toml", "uv.lock", "README.md", "alembic.ini"}}
     lock = tomllib.loads((ROOT / "uv.lock").read_text())
     allowed = {p["name"]: p["version"] for p in lock["package"]}
