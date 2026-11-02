@@ -50,12 +50,19 @@ def _set(item: dict[str, Any]) -> str:
     return "; ".join(parts)
 
 
-def render(payload: dict[str, Any], *, goal: dict[str, Any], names: dict[str, str]) -> str:
+def render(
+    payload: dict[str, Any], *, goal: dict[str, Any], names: dict[str, str],
+    draft_only: bool = False,
+) -> str:
     source = payload["publication_source"]
     card, version = source["program_snapshot"], source["version"]
     creating = source["intent"] == "create"
-    action = "Опубликовать новую программу" if creating else "Опубликовать новую версию программы"
-    lines = [f"{action} «{card['name']}»?", "Пока ничего не опубликовано."]
+    action = (
+        "Подготовлена новая программа" if creating else "Подготовлена новая версия программы"
+    ) if draft_only else (
+        "Опубликовать новую программу" if creating else "Опубликовать новую версию программы"
+    )
+    lines = [f"{action} «{card['name']}»{' ' if draft_only else '?'}".rstrip(), "Пока ничего не опубликовано."]
     lines.append(f"Период программы: {card['starts_on']} — {card['ends_on']}.")
     lines.append(f"Версия «{version['version_label']}»: {version['period_start']} — {version['period_end']}.")
     target = goal.get("target_value")
@@ -110,7 +117,9 @@ def render(payload: dict[str, Any], *, goal: dict[str, Any], names: dict[str, st
         lines.append(f"• Ограничение: {gap['message_safe']}")
     if payload.get("publication_reason"):
         lines.append(f"Причина публикации: {payload['publication_reason']}")
-    if creating:
+    if draft_only:
+        lines.append("Это технический черновик: его подтверждение не публикует программу. Для публикации нужен отдельный предпросмотр публикации.")
+    elif creating:
         lines.append("После подтверждения программа и эта версия станут действующими.")
     else:
         lines.append("После подтверждения эта версия станет действующей; прежняя версия останется в истории.")

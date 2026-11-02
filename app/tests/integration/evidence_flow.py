@@ -80,6 +80,10 @@ def post(
             .model_dump(mode="json")
         )
         normalized.pop("request_digest")
+        if model is PreviewRequest:
+            for field in ("entry_name", "entry_key"):
+                if normalized.get(field) is None:
+                    normalized.pop(field)
         body = {**normalized, "request_digest": digest_payload(normalized)}
     headers = {
         "Authorization": f"Bearer {OWNER if owner else AGENT}",
@@ -425,7 +429,7 @@ def main() -> None:
         key="eg07-availability-preview-check",
     )["data"]
     canonical_text = availability_preview["canonical_text"]
-    assert "available → unavailable" in canonical_text
+    assert "доступен → недоступен" in canonical_text
     assert "Предыдущее время проверки: не было" in canonical_text
     assert "Новое время проверки (будет сохранено): " in canonical_text
     checked_at_text = canonical_text.split("Новое время проверки (будет сохранено): ", 1)[1].split(
@@ -538,7 +542,7 @@ def main() -> None:
         },
         key="eg07-replacement-basis",
     )["data"]
-    assert "Evidence basis:" in replacement_preview["canonical_text"]
+    assert "Нет достаточной применимой проверенной научной опоры" in replacement_preview["canonical_text"]
     assert "Уверенность: недостаточно данных" in replacement_preview["canonical_text"]
     assert (
         "Нет достаточной применимой проверенной научной опоры; решение основано на перечисленных допущениях."

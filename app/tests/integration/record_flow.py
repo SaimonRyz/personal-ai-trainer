@@ -63,6 +63,10 @@ def post(path: str, payload: dict[str, Any], key: str | None = None, expected: i
             mode="json",
         )
         normalized.pop("request_digest", None)
+        if model is PreviewRequest:
+            for field in ("entry_name", "entry_key"):
+                if normalized.get(field) is None:
+                    normalized.pop(field)
         checked = {**normalized, "request_digest": digest_payload(normalized)}
         payload = checked
     headers = {

@@ -372,9 +372,7 @@ class WorkoutImportBatchRepository:
                 line += "; название в отчёте не задано"
             if item.get("exercise_summaries"):
                 summaries = item["exercise_summaries"]
-                line += "; результаты: " + ", ".join(summaries[:3])
-                if len(summaries) > 3:
-                    line += f"; ещё упражнений: {len(summaries) - 3}"
+                line += "; упражнения: " + ", ".join(summaries)
             if item.get("reason"):
                 line += f"; причина: {item['reason']}"
             if item["decision"] == "create" and item.get("same_date_existing_count"):

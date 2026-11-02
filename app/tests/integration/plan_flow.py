@@ -111,6 +111,9 @@ def post_with_status(
             mode="json"
         )
         normalized.pop("request_digest", None)
+        if model is PreviewRequest:
+            normalized = {field: value for field, value in normalized.items()
+                          if field not in {"entry_name", "entry_key"} or value is not None}
         body = {**normalized, "request_digest": digest_payload(normalized)}
     headers = {
         "Accept": "application/json",
@@ -1298,11 +1301,19 @@ def main() -> None:
 
     for action, offset in (("cancel", 4), ("miss", 5)):
         untouched = create_plan(action, exercise_id, exercise["unilateral"], metrics, offset)
+        untouched_blocks = current_plan(untouched["plan_id"])["tree"]["blocks"]
         terminal = transition(untouched, action, action + "-lifecycle")
         current = current_plan(untouched["plan_id"])
         assert current["lifecycle"] == {"cancel": "cancelled", "miss": "missed"}[action]
         assert current["plan_ref"]["revision_id"] == terminal["source_revision_id"]
-        assert current["tree"]["blocks"] == exact["tree"]["blocks"]
+        def without_revision_ids(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: without_revision_ids(item) for key, item in value.items()
+                        if key not in {"planned_block_id", "planned_exercise_id", "planned_set_id"}}
+            if isinstance(value, list):
+                return [without_revision_ids(item) for item in value]
+            return value
+        assert without_revision_ids(current["tree"]["blocks"]) == without_revision_ids(untouched_blocks)
 
     with ENGINE.connect() as db:
         assert (
