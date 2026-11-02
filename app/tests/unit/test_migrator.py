@@ -42,15 +42,17 @@ def test_migration_manifest_is_ordered_and_checksums_are_canonical() -> None:
         "0025_strength_goal_type",
         "0026_cardio_exercise_category",
         "0027_workout_import_batch",
-        "0028_plan_recommendation_kinds",
+        "0028_body_weight_goal_type",
+        "0029_profile_update",
+        "0030_plan_recommendation_kinds",
     ]
     assert all(len(item.checksum) == 64 for item in MIGRATIONS)
     assert MIGRATIONS[-1].checksum == (
-        "8743a58fe467b13510b07140f9516d97920d1d11f319b7b3509164eb8cf789df"
+        "dfe40e06835572b50328cfb33a22ae3c34c73e2f935e797f63bb75fea6ec6a8f"
     )
-    assert MIGRATIONS[-2].revision == "0027_workout_import_batch"
+    assert MIGRATIONS[-2].revision == "0029_profile_update"
     assert all(len(item.revision) <= 32 for item in MIGRATIONS)
-    assert MIGRATIONS[-1].revision == "0028_plan_recommendation_kinds"
+    assert MIGRATIONS[-1].revision == "0030_plan_recommendation_kinds"
 
 
 def test_pending_migrations_continue_after_active_revision() -> None:

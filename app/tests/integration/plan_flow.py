@@ -111,6 +111,10 @@ def post_with_status(
             mode="json"
         )
         normalized.pop("request_digest", None)
+        if model is PreviewRequest:
+            for optional in ("entry_name", "entry_key"):
+                if normalized.get(optional) is None:
+                    normalized.pop(optional)
         body = {**normalized, "request_digest": digest_payload(normalized)}
     headers = {
         "Accept": "application/json",
@@ -222,6 +226,18 @@ def current_plan(plan_id: str) -> dict[str, Any]:
             {"context": context("read-" + str(uuid4())), "mode": "current", "plan_id": plan_id},
         )["data"],
     )
+
+
+def logical_tree(value: Any) -> Any:
+    """Compare plan content while ignoring IDs assigned to copied child rows."""
+    if isinstance(value, list):
+        return [logical_tree(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: logical_tree(item) for key, item in value.items()
+            if key == "exercise_id" or not key.endswith("_id")
+        }
+    return value
 
 
 def program_version_input(version: dict[str, Any]) -> dict[str, Any]:
@@ -1406,11 +1422,12 @@ def main() -> None:
 
     for action, offset in (("cancel", 4), ("miss", 5)):
         untouched = create_plan(action, exercise_id, exercise["unilateral"], metrics, offset)
+        before_tree = current_plan(untouched["plan_id"])["tree"]["blocks"]
         terminal = transition(untouched, action, action + "-lifecycle")
         current = current_plan(untouched["plan_id"])
         assert current["lifecycle"] == {"cancel": "cancelled", "miss": "missed"}[action]
         assert current["plan_ref"]["revision_id"] == terminal["source_revision_id"]
-        assert current["tree"]["blocks"] == exact["tree"]["blocks"]
+        assert logical_tree(current["tree"]["blocks"]) == logical_tree(before_tree)
 
     with ENGINE.connect() as db:
         assert (

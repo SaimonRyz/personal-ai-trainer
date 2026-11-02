@@ -167,9 +167,19 @@ MIGRATIONS = (
         "0027_workout_import_batch.py",
     ),
     MigrationSpec(
-        "0028_plan_recommendation_kinds",
-        "8743a58fe467b13510b07140f9516d97920d1d11f319b7b3509164eb8cf789df",
-        "0028_plan_recommendation_kinds.py",
+        "0028_body_weight_goal_type",
+        "5fa2a01f7ea1a5b08fab85dacd29cdcfa20c536e115f588b2d6d691f836651bb",
+        "0028_body_weight_goal_type.py",
+    ),
+    MigrationSpec(
+        "0029_profile_update",
+        "f838ab035788566b27a3cbb41dd1ea63839adc02823ef4127f1462a9941f1a7c",
+        "0029_profile_update.py",
+    ),
+    MigrationSpec(
+        "0030_plan_recommendation_kinds",
+        "dfe40e06835572b50328cfb33a22ae3c34c73e2f935e797f63bb75fea6ec6a8f",
+        "0030_plan_recommendation_kinds.py",
     ),
 )
 

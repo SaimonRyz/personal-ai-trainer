@@ -9,6 +9,7 @@
 !alembic.ini
 !src/
 !src/**
+src/trainer/spike/
 !mcp/
 !mcp/**
 !migrations/

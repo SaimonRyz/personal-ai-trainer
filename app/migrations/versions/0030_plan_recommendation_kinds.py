@@ -6,12 +6,12 @@ from collections.abc import Sequence
 
 from alembic import op
 
-revision: str = "0028_plan_recommendation_kinds"
-down_revision: str | None = "0027_workout_import_batch"
+revision: str = "0030_plan_recommendation_kinds"
+down_revision: str | None = "0029_profile_update"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | None = None
 
-MIGRATION_CHECKSUM = "8743a58fe467b13510b07140f9516d97920d1d11f319b7b3509164eb8cf789df"
+MIGRATION_CHECKSUM = "dfe40e06835572b50328cfb33a22ae3c34c73e2f935e797f63bb75fea6ec6a8f"
 
 
 def upgrade() -> None:
@@ -32,7 +32,7 @@ def upgrade() -> None:
         ON CONFLICT (code) DO NOTHING;
         INSERT INTO trainer.schema_migrations
             (migration_id, checksum, applied_at, duration_ms, app_schema_version, created_at)
-        VALUES ('0028_plan_recommendation_kinds', '{MIGRATION_CHECKSUM}', now(), 0, '28', now());
+        VALUES ('0030_plan_recommendation_kinds', '{MIGRATION_CHECKSUM}', now(), 0, '30', now());
     """)
 
 

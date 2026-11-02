@@ -24,6 +24,7 @@ def test_repo_skill_references_only_tools_in_the_active_mcp_catalog() -> None:
         "create_goal_draft",
         "create_inventory_change_draft",
         "create_onboarding_draft",
+        "create_profile_update_draft",
         "create_exercise_draft",
         "create_program_draft",
         "create_program_publication_draft",

@@ -15,6 +15,7 @@ from trainer_mcp.contracts import (
     EquipmentCardInput,
     HistoricalRecordDraftInput,
     MeasurementDraftInput,
+    PlanRecommendationInput,
     PlanTreeInput,
     ProgramIdentityInput,
     ProgramRecommendationInput,
@@ -86,7 +87,7 @@ class PlanLifecycleInput(ClosedModel):
     expected_current_revision_id: UUID
     reason: str | None = Field(default=None, max_length=2000)
     replacement_plan: PlanTreeInput | None = None
-    replacement_recommendations: list[ProgramRecommendationInput] | None = Field(
+    replacement_recommendations: list[PlanRecommendationInput] | None = Field(
         default=None, min_length=1, max_length=100
     )
 

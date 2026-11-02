@@ -388,6 +388,31 @@ class MeasurementRepository:
         profile = self._profile()
         profile_id = str(profile["profile_id"])
         self._lock_profile(profile_id)
+        previous = None
+        if payload.get("draft_id") is not None:
+            previous = self.session.execute(
+                text(
+                    "SELECT d.draft_id,d.owner_profile_id,d.latest_revision_id,d.state,d.expires_at,"
+                    "r.revision_no,r.typed_payload FROM trainer.drafts d "
+                    "JOIN trainer.draft_revisions r ON r.draft_revision_id=d.latest_revision_id "
+                    "WHERE d.draft_id=:draft AND d.intent_type='measurement' FOR UPDATE OF d"
+                ),
+                {"draft": payload["draft_id"]},
+            ).mappings().one_or_none()
+            if previous is None or str(previous["owner_profile_id"]) != profile_id:
+                raise ContextRepositoryError("not_found", "measurement draft not found", 404)
+            if previous["state"] != "open" or previous["expires_at"] <= datetime.now(UTC):
+                raise ContextRepositoryError("already_superseded", "measurement draft is not open", 409)
+            if str(previous["latest_revision_id"]) != str(payload["expected_revision_id"]):
+                raise ContextRepositoryError("stale_preview", "measurement draft revision changed", 409)
+            old = dict(previous["typed_payload"])
+            if old["measurement_change"] != payload["intent"]:
+                raise ContextRepositoryError("validation_error", "measurement draft intent cannot change", 422)
+            if payload["intent"] == "correct" and (
+                old["measurement_root_id"] != str(payload["measurement_root_id"])
+                or old["expected_current_session_id"] != str(payload["expected_current_session_id"])
+            ):
+                raise ContextRepositoryError("validation_error", "measurement correction target cannot change", 422)
         catalog_digest = self._catalog_digest()
         session = normalize_session(payload["session"])
         intent = payload["intent"]
@@ -448,34 +473,46 @@ class MeasurementRepository:
                 }
             ],
         }
-        draft_id, revision_id, now = uuid4(), uuid4(), datetime.now(UTC)
+        draft_id = previous["draft_id"] if previous else uuid4()
+        revision_id, now = uuid4(), datetime.now(UTC)
+        revision_no = int(previous["revision_no"]) + 1 if previous else 1
         digest = digest_payload(typed)
-        self.session.execute(
-            text(
-                "INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,latest_revision_id,expires_at,created_at) "
-                "VALUES (:draft,'measurement',:profile,'open',:revision,:expires,:now)"
-            ),
-            {
-                "draft": draft_id,
-                "profile": profile_id,
-                "revision": revision_id,
-                "expires": now + timedelta(hours=24),
-                "now": now,
-            },
-        )
+        if previous:
+            self.session.execute(
+                text(
+                    "UPDATE trainer.draft_revisions SET trust_state='superseded' "
+                    "WHERE draft_revision_id=:previous AND trust_state='shown'"
+                ),
+                {"previous": previous["latest_revision_id"]},
+            )
+        else:
+            self.session.execute(
+                text(
+                    "INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,latest_revision_id,expires_at,created_at) "
+                    "VALUES (:draft,'measurement',:profile,'open',:revision,:expires,:now)"
+                ),
+                {"draft": draft_id, "profile": profile_id, "revision": revision_id,
+                 "expires": now + timedelta(hours=24), "now": now},
+            )
         self.session.execute(
             text(
                 "INSERT INTO trainer.draft_revisions(draft_revision_id,draft_id,revision_no,typed_payload,content_digest,trust_state,confirmation_kind,created_at) "
-                "VALUES (:revision,:draft,1,CAST(:payload AS jsonb),:digest,'draft','normal',:now)"
+                "VALUES (:revision,:draft,:number,CAST(:payload AS jsonb),:digest,'draft','normal',:now)"
             ),
             {
                 "revision": revision_id,
                 "draft": draft_id,
+                "number": revision_no,
                 "payload": json.dumps(typed),
                 "digest": digest,
                 "now": now,
             },
         )
+        if previous:
+            self.session.execute(
+                text("UPDATE trainer.drafts SET latest_revision_id=:revision WHERE draft_id=:draft"),
+                {"revision": revision_id, "draft": draft_id},
+            )
         deps = [
             self.context._add_dependency(
                 revision_id,
@@ -489,7 +526,7 @@ class MeasurementRepository:
         response = {
             "draft_id": str(draft_id),
             "revision_id": str(revision_id),
-            "revision_no": 1,
+            "revision_no": revision_no,
             "content_digest": digest,
             "dependencies": deps,
             "gaps": [],

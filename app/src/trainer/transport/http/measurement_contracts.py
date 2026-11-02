@@ -46,16 +46,16 @@ class MeasurementValueInput(ClosedModel):
     measurement_kind: MeasurementKind
     original_value: DecimalString
     original_unit: Literal["kilogram", "pound", "centimeter", "millimeter", "inch"]
-    side: Literal["left", "right"] | None
-    method: MethodInput | None
-    comment: str | None = Field(min_length=1, max_length=2000)
+    side: Literal["left", "right"] | None = None
+    method: MethodInput | None = None
+    comment: str | None = Field(default=None, min_length=1, max_length=2000)
 
 
 class MeasurementSessionInput(ClosedModel):
     measured_on: date
-    measured_time: time | None
-    conditions: str | None = Field(min_length=1, max_length=2000)
-    comment: str | None = Field(min_length=1, max_length=2000)
+    measured_time: time | None = None
+    conditions: str | None = Field(default=None, min_length=1, max_length=2000)
+    comment: str | None = Field(default=None, min_length=1, max_length=2000)
     values: list[MeasurementValueInput] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
@@ -69,6 +69,14 @@ class MeasurementCreateRequest(ClosedModel):
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     intent: Literal["create"]
     session: MeasurementSessionInput
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> MeasurementCreateRequest:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        return self
 
 
 class MeasurementCorrectRequest(ClosedModel):
@@ -79,6 +87,14 @@ class MeasurementCorrectRequest(ClosedModel):
     expected_current_session_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
     session: MeasurementSessionInput
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> MeasurementCorrectRequest:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        return self
 
 
 MeasurementDraftRequest = Annotated[
