@@ -166,6 +166,53 @@ def test_onboarding_http_preserves_unknowns_and_rejects_place_availability() -> 
     assert len(calls) == 1
 
 
+def test_profile_update_http_accepts_exact_date_and_rejects_age_field() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def executor(**kwargs: Any) -> dict[str, Any]:
+        if kwargs["action"] == "record_failed_request":
+            return {"recorded": True}
+        calls.append(kwargs)
+        return {
+            "draft_id": str(uuid4()), "revision_id": str(uuid4()),
+            "revision_no": 1, "content_digest": "a" * 64,
+            "dependencies": [], "gaps": [],
+            "preview_candidate": {"summary": "Profile update",
+                                  "confirmation_kind": "normal", "complete": True},
+        }
+
+    test_client = TestClient(create_app(
+        Settings(api_token=SecretStr(TEST_TOKEN)),
+        context_service=ContextService(executor),
+    ), raise_server_exceptions=False)
+    body = {
+        "context": {"conversation_id": "profile-update", "message_id": "exact-date",
+                    "effective_at": "2026-11-02T00:00:00Z",
+                    "timezone": "Asia/Novokuznetsk", "locale": "und"},
+        "profile_id": str(uuid4()), "expected_profile_revision_id": str(uuid4()),
+        "profile": {"birth_date": "1999-05-12", "sex": None,
+                    "timezone": "Asia/Novokuznetsk", "started_on": None,
+                    "desired_sessions_per_week": None, "usual_place_id": None,
+                    "comment": None},
+    }
+    accepted = test_client.post(
+        "/api/v1/commands/profile-update-drafts",
+        headers={**required_headers(), "Idempotency-Key": "profile-update-1"},
+        json={**body, "request_digest": digest_payload(body)},
+    )
+    assert accepted.status_code == 200
+    assert calls[0]["action"] == "create_profile_update_draft"
+    assert calls[0]["payload"]["profile"]["birth_date"] == "1999-05-12"
+    rejected = test_client.post(
+        "/api/v1/commands/profile-update-drafts",
+        headers={**required_headers(), "Idempotency-Key": "profile-update-2"},
+        json={**body, "profile": {**body["profile"], "birth_date": 27},
+              "request_digest": digest_payload(body)},
+    )
+    assert rejected.status_code == 400
+    assert len(calls) == 1
+
+
 def test_onboarding_http_accepts_only_explicit_exact_familiar_exercise_refs() -> None:
     effective_at = datetime(2026, 8, 24, 10, 0, tzinfo=UTC)
     exercise_id, exercise_revision_id = uuid4(), uuid4()

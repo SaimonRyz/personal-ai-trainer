@@ -32,6 +32,7 @@ from trainer.transport.http.contracts import (
     ExerciseCatalogDraftRequest,
     GoalDraftRequest,
     OnboardingDraftRequest,
+    ProfileUpdateDraftRequest,
     PlanDraftRequest,
     ProgramDraftRequest,
     ProgramPublicationDraftRequest,
@@ -56,6 +57,7 @@ def test_active_tool_catalog_is_closed_and_contains_no_fixture_tools() -> None:
         "create_inventory_change_draft",
         "create_historical_record_draft",
         "create_onboarding_draft",
+        "create_profile_update_draft",
         "create_plan_draft",
         "create_plan_lifecycle_draft",
         "create_record_decision_draft",
@@ -324,6 +326,30 @@ def _capture_api_call(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(server, "api_call", fake_api_call)
     return captured
+
+
+def test_profile_update_draft_requires_exact_birth_date_on_wire(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured = _capture_api_call(monkeypatch)
+    profile_id, revision_id = uuid4(), uuid4()
+    server.create_profile_update_draft(
+        conversation_id="profile-update", message_id="exact-date",
+        timezone="Asia/Novokuznetsk", correlation_id=uuid4(),
+        causation_id=uuid4(), idempotency_key="profile-update-1",
+        profile_id=profile_id, expected_profile_revision_id=revision_id,
+        profile=ProfileInput(timezone="Asia/Novokuznetsk", birth_date=date(1999, 5, 12)),
+    )
+    assert captured["path"] == "/api/v1/commands/profile-update-drafts"
+    assert captured["body"]["profile_id"] == str(profile_id)
+    assert captured["body"]["expected_profile_revision_id"] == str(revision_id)
+    assert captured["body"]["profile"]["birth_date"] == "1999-05-12"
+    _assert_request_digest_and_validate(captured["body"], ProfileUpdateDraftRequest)
+    with pytest.raises(ValidationError):
+        ProfileUpdateDraftRequest.model_validate({
+            **captured["body"], "request_digest": "0" * 64,
+            "profile": {**captured["body"]["profile"], "birth_date": 27},
+        })
 
 
 def _recommendation() -> dict[str, Any]:

@@ -110,7 +110,7 @@ class GoalInput(ClosedModel):
     parent_goal_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
-    goal_type: str = Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")
+    goal_type: str = Field(min_length=1, max_length=100, description="Use performance, strength, or body_weight; body_weight uses kilogram and a positive target weight.")
     start_value: Decimal | None = None
     target_value: Decimal | None = None
     unit_code: str | None = Field(default=None, description="Use catalog codes: kilogram for kg, repetition for reps; never send kg.")
@@ -153,6 +153,14 @@ class OnboardingDraftRequest(ClosedModel):
         if (self.draft_id is None) != (self.expected_revision_id is None):
             raise ValueError("draft_id and expected_revision_id must be supplied together")
         return self
+
+
+class ProfileUpdateDraftRequest(ClosedModel):
+    context: RequestContext
+    profile_id: UUID
+    expected_profile_revision_id: UUID
+    profile: ProfileInput
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
 class InventoryCreateDraftRequest(ClosedModel):
@@ -1707,7 +1715,7 @@ class PlanResponse(ClosedModel):
 class PreviewRequest(ClosedModel):
     context: RequestContext
     revision_id: UUID
-    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout"]
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout", "measurement"]
     entry_name: str | None = Field(default=None, min_length=1, max_length=200)
     entry_key: str | None = Field(default=None, min_length=1, max_length=100)
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")

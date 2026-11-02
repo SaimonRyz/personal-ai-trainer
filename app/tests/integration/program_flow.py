@@ -86,6 +86,10 @@ def post(
                     mode="json"
                 )
         body.pop("request_digest", None)
+        if model is PreviewRequest:
+            for optional in ("entry_name", "entry_key"):
+                if body.get(optional) is None:
+                    body.pop(optional, None)
         body = {**body, "request_digest": digest_payload(body)}
     headers = {
         "Accept": "application/json",

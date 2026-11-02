@@ -69,6 +69,7 @@ ALLOWED_STATIC_ROUTES = {
     "/api/v1/queries/recommendations/explanation",
     "/api/v1/commands/goal-drafts",
     "/api/v1/commands/onboarding-drafts",
+    "/api/v1/commands/profile-update-drafts",
     "/api/v1/commands/exercise-catalog-drafts",
     "/api/v1/commands/familiar-exercise-batches",
     "/api/v1/commands/workout-import-batches",
@@ -266,6 +267,40 @@ def create_onboarding_draft(
         openWorldHint=False,
     ),
 )
+def create_profile_update_draft(
+    conversation_id: ConversationId,
+    message_id: MessageId,
+    timezone: Timezone,
+    correlation_id: UUID,
+    causation_id: UUID,
+    idempotency_key: IdempotencyKey,
+    profile_id: UUID,
+    expected_profile_revision_id: UUID,
+    profile: ProfileInput,
+) -> dict[str, Any]:
+    """Replace an existing profile revision. Copy unchanged fields from get_profile_context; birth_date needs the user's exact date, never an age-derived guess."""
+    body = {
+        "context": context(conversation_id, message_id, timezone),
+        "profile_id": str(profile_id),
+        "expected_profile_revision_id": str(expected_profile_revision_id),
+        "profile": json_model(profile),
+    }
+    with_request_digest(body)
+    return api_call(
+        "/api/v1/commands/profile-update-drafts", body,
+        correlation_id, causation_id, idempotency_key,
+    )
+
+
+@mcp.tool(
+    structured_output=True,
+    annotations=ToolAnnotations(
+        readOnlyHint=False,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=False,
+    ),
+)
 def create_goal_draft(
     conversation_id: ConversationId,
     message_id: MessageId,
@@ -274,7 +309,7 @@ def create_goal_draft(
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
     name: Annotated[str, Field(min_length=1, max_length=200)],
-    goal_type: Annotated[str, Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")],
+    goal_type: Annotated[str, Field(min_length=1, max_length=100, description="Use performance, strength, or body_weight; body_weight uses kilogram and a positive target weight.")],
     set_on: date,
     target_date: date,
     priority: Annotated[int, Field(ge=1, le=100)],
@@ -812,14 +847,14 @@ def render_preview(
     message_id: MessageId,
     timezone: Timezone,
     revision_id: UUID,
-    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout"],
+    detail_level: Literal["short", "full", "inventory", "details", "exercise", "groups", "workout", "measurement"],
     correlation_id: UUID,
     causation_id: UUID,
     idempotency_key: IdempotencyKey,
     entry_name: str | None = None,
     entry_key: str | None = None,
 ) -> dict[str, Any]:
-    """Render one exact revision. Full confirms; onboarding and familiar-batch sections are nonconfirmable views."""
+    """Render one exact revision. Full confirms; section details, including measurement, cannot confirm."""
     body: dict[str, Any] = {
         "context": context(conversation_id, message_id, timezone),
         "revision_id": str(revision_id),

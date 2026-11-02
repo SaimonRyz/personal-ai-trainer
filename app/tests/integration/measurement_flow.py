@@ -48,6 +48,19 @@ def create(prefix: str, data: dict[str, object]) -> tuple[dict[str, object], dic
     draft = post(PATH, {"context": context(prefix), "intent": "create", "session": data}, prefix)[
         "data"
     ]
+    if prefix == "eg06-first":
+        details = post(
+            "/api/v1/commands/previews",
+            {
+                "context": context(prefix + "-details"),
+                "revision_id": draft["revision_id"],
+                "detail_level": "measurement",
+            },
+            prefix + "-details",
+        )["data"]
+        assert details["revision_id"] == draft["revision_id"]
+        assert not details["complete"]
+        assert "81.646627 кг" in details["canonical_text"]
     shown = preview(draft, prefix)
     committed = post(
         f"/api/v1/commands/previews/{shown['preview_id']}/confirm",
@@ -121,7 +134,8 @@ def main() -> None:
             ],
         ),
     )
-    assert "81.646627" in first["canonical_text"]
+    assert "Вес — 180 фунт" in first["canonical_text"]
+    assert "81.646627" not in first["canonical_text"]
     root = created["created_revisions"][0]["object_id"]
     first_session = created["created_revisions"][0]["revision_id"]
     current = sessions("eg06-read-first")["items"]
@@ -177,7 +191,7 @@ def main() -> None:
         ),
     )
     third_text = third["canonical_text"]
-    assert "обхват талии" in third_text
+    assert "Талия" in third_text
     assert "88" in third_text
     assert "Synthetic navel standing" in third_text
     assert waist["measurement_value_id"] not in third_text
@@ -306,6 +320,37 @@ def main() -> None:
         if row["measured_on"] == "2026-10-12" and row["measured_time"] == "09:00:00"
     ]
     assert len(matching) == 1
+    revision_one = post(
+        PATH,
+        {"context": context("eg06-revision-one"), "intent": "create",
+         "session": session("2026-10-15", [measurement("body_mass", "70", "kilogram")])},
+        "eg06-revision-one",
+    )["data"]
+    old_preview = preview(revision_one, "eg06-revision-one")
+    revision_two = post(
+        PATH,
+        {"context": context("eg06-revision-two"), "intent": "create",
+         "draft_id": revision_one["draft_id"],
+         "expected_revision_id": revision_one["revision_id"],
+         "session": session("2026-10-15", [measurement("body_mass", "71", "kilogram")])},
+        "eg06-revision-two",
+    )["data"]
+    assert revision_two["draft_id"] == revision_one["draft_id"]
+    assert revision_two["revision_no"] == 2
+    rejected = post(
+        f"/api/v1/commands/previews/{old_preview['preview_id']}/confirm",
+        confirm_body(old_preview, "eg06-old-confirm"), "eg06-old-confirm", expected=409,
+    )
+    assert rejected["error"]["code"] == "stale_preview"
+    new_preview = preview(revision_two, "eg06-revision-two")
+    assert "Вес — 71 кг" in new_preview["canonical_text"]
+    post(
+        f"/api/v1/commands/previews/{new_preview['preview_id']}/confirm",
+        confirm_body(new_preview, "eg06-new-confirm"), "eg06-new-confirm",
+    )
+    saved = [row for row in sessions("eg06-revision-read")["items"]
+             if row["measured_on"] == "2026-10-15"]
+    assert len(saved) == 1 and saved[0]["values"][0]["original_value"] == "71.000000"
     print("PASS: E-G06 create/correct/history, method identity, series, BMI and stale preview")
 
 

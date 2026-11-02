@@ -20,6 +20,7 @@ enabled_tools = [
     "create_onboarding_draft",
     "create_plan_draft",
     "create_plan_lifecycle_draft",
+    "create_profile_update_draft",
     "create_program_draft",
     "create_program_publication_draft",
     "create_record_decision_draft",

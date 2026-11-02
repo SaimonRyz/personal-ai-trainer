@@ -77,7 +77,7 @@ class GoalInput(ClosedModel):
     parent_goal_id: UUID | None = None
     name: str = Field(min_length=1, max_length=200)
     description: str | None = None
-    goal_type: str = Field(min_length=1, max_length=100, description="Use performance or strength; strength includes a one-repetition maximum goal.")
+    goal_type: str = Field(min_length=1, max_length=100, description="Use performance, strength, or body_weight; body_weight uses kilogram and a positive target weight.")
     start_value: Decimal | None = None
     target_value: Decimal | None = None
     unit_code: str | None = Field(default=None, description="Use catalog codes: kilogram for kg, repetition for reps; never send kg.")
@@ -989,22 +989,30 @@ class MeasurementValueDraftInput(ClosedModel):
     measurement_kind: MeasurementKind
     original_value: MeasurementDecimalString
     original_unit: Literal["kilogram", "pound", "centimeter", "millimeter", "inch"]
-    side: Literal["left", "right"] | None
-    method: MeasurementMethodInput | None
-    comment: str | None = Field(min_length=1, max_length=2000)
+    side: Literal["left", "right"] | None = None
+    method: MeasurementMethodInput | None = None
+    comment: str | None = Field(default=None, min_length=1, max_length=2000)
 
 
 class MeasurementSessionDraftInput(ClosedModel):
     measured_on: date
-    measured_time: time | None
-    conditions: str | None = Field(min_length=1, max_length=2000)
-    comment: str | None = Field(min_length=1, max_length=2000)
+    measured_time: time | None = None
+    conditions: str | None = Field(default=None, min_length=1, max_length=2000)
+    comment: str | None = Field(default=None, min_length=1, max_length=2000)
     values: list[MeasurementValueDraftInput] = Field(min_length=1, max_length=100)
 
 
 class MeasurementCreateDraftInput(ClosedModel):
     intent: Literal["create"]
     session: MeasurementSessionDraftInput
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> MeasurementCreateDraftInput:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        return self
 
 
 class MeasurementCorrectDraftInput(ClosedModel):
@@ -1013,6 +1021,14 @@ class MeasurementCorrectDraftInput(ClosedModel):
     expected_current_session_id: UUID
     reason: str = Field(min_length=1, max_length=2000)
     session: MeasurementSessionDraftInput
+    draft_id: UUID | None = None
+    expected_revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def validate_revision_target(self) -> MeasurementCorrectDraftInput:
+        if (self.draft_id is None) != (self.expected_revision_id is None):
+            raise ValueError("draft_id and expected_revision_id must be supplied together")
+        return self
 
 
 MeasurementDraftInput = Annotated[

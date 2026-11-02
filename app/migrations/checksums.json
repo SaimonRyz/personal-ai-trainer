@@ -25,5 +25,7 @@
   "0024_parallel_bars_equipment.py": "a1fa9a873e2577378f59f8fbfdacb40883caf1ea3ef637a29e5549b79c100de2",
   "0025_strength_goal_type.py": "bd646fd55fd5b0fb62dde22912f6def65a65346d2660150c8135214498bfb4ec",
   "0026_cardio_exercise_category.py": "b7230ed88fd9bfe57f71af55ebd3e2214b0b4357ebb72e79c0209279a4e4c67e",
-  "0027_workout_import_batch.py": "0b5f60bfb678e9f6df3a7e6d5ab3f1cae622bc2a0f89eb19cf0587548d193a93"
+  "0027_workout_import_batch.py": "0b5f60bfb678e9f6df3a7e6d5ab3f1cae622bc2a0f89eb19cf0587548d193a93",
+  "0028_body_weight_goal_type.py": "b85e8fc99aec25c86b60afe38744f3c1042fbeffcc00463951ab005d43c190dd",
+  "0029_profile_update.py": "1be8c213527f538c3e1b15c0ebbb38c79c7f181ed2112d73b7c5ad168f91bdc8"
 }

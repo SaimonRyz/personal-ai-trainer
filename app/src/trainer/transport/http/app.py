@@ -24,6 +24,7 @@ from trainer.application.readiness import (
     UnconfiguredReadinessProbe,
 )
 from trainer.config.settings import Settings, load_settings
+from trainer.domain.context import DomainValidationError
 from trainer.observability.logging import configure_logging
 from trainer.transport.http.contracts import (
     CommitResult,
@@ -44,6 +45,7 @@ from trainer.transport.http.contracts import (
     HistoricalRecordDraftRequest,
     InventoryChangeDraftRequest,
     OnboardingDraftRequest,
+    ProfileUpdateDraftRequest,
     OperationStatusRequest,
     OperationStatusResponse,
     PlanDraftRequest,
@@ -319,6 +321,7 @@ def create_app(
     def audit_failed_command(request: Request, error_code: str) -> None:
         method_by_path = {
             "/api/v1/commands/onboarding-drafts": "CMD-01",
+            "/api/v1/commands/profile-update-drafts": "CMD-27",
             "/api/v1/commands/goal-drafts": "CMD-02",
             "/api/v1/commands/inventory-change-drafts": "CMD-09",
             "/api/v1/commands/measurement-session-drafts": "CMD-11",
@@ -358,14 +361,39 @@ def create_app(
             logger.warning("failed_request_audit_unavailable")
 
     @app.exception_handler(RequestValidationError)
-    async def validation_error(request: Request, _: RequestValidationError) -> JSONResponse:
+    async def validation_error(request: Request, error: RequestValidationError) -> JSONResponse:
         correlation_id = getattr(request.state, "correlation_id", uuid4())
         audit_failed_command(request, "validation_error")
+        field_errors: list[dict[str, str]] = []
+        for item in error.errors():
+            location = list(item.get("loc", ()))
+            if location and location[0] in ("body", "query", "path"):
+                location.pop(0)
+            if location and location[0] in ("create", "correct"):
+                location.pop(0)
+            path = "".join(
+                f"[{part}]" if isinstance(part, int) else f".{part}" for part in location
+            ).lstrip(".") or "request"
+            validation_type = item.get("type", "invalid")
+            message = {
+                "missing": "Required field is missing.",
+                "extra_forbidden": "Field is not supported.",
+                "string_pattern_mismatch": "Value has an invalid format.",
+                "literal_error": "Value is not one of the supported codes.",
+            }.get(validation_type, "Invalid value.")
+            cause = (item.get("ctx") or {}).get("error")
+            if isinstance(cause, DomainValidationError):
+                detail = str(cause)
+                if ": " in detail:
+                    domain_path, message = detail.split(": ", 1)
+                    path = domain_path
+            field_errors.append({"path": path, "code": validation_type, "message_safe": message})
         return error_response(
             status_code=400,
             code="validation_error",
             message="request validation failed",
             correlation_id=correlation_id,
+            field_errors=field_errors,
         )
 
     @app.exception_handler(StarletteHTTPException)
@@ -686,6 +714,29 @@ def create_app(
             causation_id=request.state.causation_id,
         )
         return envelope(result, request)
+
+    @app.post(
+        "/api/v1/commands/profile-update-drafts",
+        response_model=DataEnvelope[DraftResult],
+        responses=DOMAIN_ERROR_RESPONSES,
+    )
+    def profile_update_draft(
+        body: ProfileUpdateDraftRequest,
+        request: Request,
+        idempotency_key: str = Header(alias="Idempotency-Key"),
+    ) -> dict[str, Any]:
+        payload = body.model_dump(mode="json")
+        service = require_context_service()
+        service.verify_digest(payload, body.request_digest)
+        return envelope(
+            service.execute(
+                "create_profile_update_draft",
+                payload=payload,
+                key=idempotency_key,
+                correlation_id=request.state.correlation_id,
+                causation_id=request.state.causation_id,
+            ), request,
+        )
 
     @app.post(
         "/api/v1/commands/measurement-session-drafts",
