@@ -44,8 +44,26 @@ def test_goal_type_matches_catalog_seed_and_reports_field() -> None:
     assert error.value.field_errors == [{
         "path": "goals[0].goal_type",
         "code": "unsupported_goal_type",
-        "message_safe": "Use performance or strength.",
+        "message_safe": "Use performance, strength, or body_weight.",
     }]
+
+
+def test_body_weight_goal_accepts_decrease_and_rejects_incompatible_values() -> None:
+    candidate = goal(goal_id=str(uuid4()))
+    candidate.update(
+        goal_type="body_weight", start_value="75", target_value="68",
+        unit_code="kilogram", target_date="2027-06-01",
+    )
+    validate_goal(candidate, path="goals[0]")
+    candidate["unit_code"] = "repetition"
+    with pytest.raises(DomainValidationError) as wrong_unit:
+        validate_goal(candidate, path="goals[0]")
+    assert wrong_unit.value.field_errors[0]["path"] == "goals[0].unit_code"
+    candidate["unit_code"] = "kilogram"
+    candidate["target_value"] = "0"
+    with pytest.raises(DomainValidationError) as invalid_target:
+        validate_goal(candidate, path="goals[0]")
+    assert invalid_target.value.field_errors[0]["path"] == "goals[0].target_value"
 
 
 def onboarding(goals: list[dict[str, object]]) -> dict[str, object]:

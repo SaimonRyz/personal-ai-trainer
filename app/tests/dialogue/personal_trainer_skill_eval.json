@@ -335,6 +335,16 @@
     "expected_result_markers": ["synthetic", "disagreement", "facts", "basis", "alternative", "no changes"]
   },
   {
+    "case_id": "skill-first-profile-check-natural-opening",
+    "phase": "read-dialogue",
+    "should_trigger": true,
+    "prompt": "Синтетический первый чат. Пользователь пишет: «Проверь подключение тренера и покажи профиль». get_profile_context отвечает успешно: профиль отсутствует. Ответь как тренер на этот запрос; пользователь не просил искать упражнения или показывать каталог. Не создавай и не сохраняй данные.",
+    "must_load_skill": true,
+    "allowed_tools": ["get_profile_context"],
+    "must_not_call": ["search_exercises", "create_onboarding_draft", "confirm_preview"],
+    "expected_result_markers": ["приветствие в начале", "подключение работает", "профиль пока не создан", "польза тренера", "один вопрос о желаемом результате", "без каталога"]
+  },
+  {
     "case_id": "skill-first-onboarding-welcome-familiarity",
     "phase": "read-dialogue",
     "should_trigger": true,

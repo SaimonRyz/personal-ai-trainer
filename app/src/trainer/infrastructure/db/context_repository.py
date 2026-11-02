@@ -3566,6 +3566,117 @@ class ContextRepository:
         )
         return response
 
+    def create_profile_update_draft(
+        self, *, payload: dict[str, Any], key: str,
+        correlation_id: UUID, causation_id: UUID | None = None,
+    ) -> dict[str, Any]:
+        operation_id, replay = self._reserve("CMD-27", key, payload["request_digest"])
+        if replay is not None:
+            self._audit_replay(operation_id, "CMD-27", correlation_id, causation_id, key, replay)
+            return replay
+        profile_id = UUID(payload["profile_id"])
+        expected = UUID(payload["expected_profile_revision_id"])
+        current = self.session.execute(text("""
+            SELECT p.current_revision_id, r.revision_no, r.birth_date, r.sex,
+                   r.timezone, r.started_on, r.desired_sessions_per_week,
+                   r.usual_place_id, r.comment
+            FROM trainer.profiles p
+            JOIN trainer.profile_revisions r ON r.profile_revision_id=p.current_revision_id
+            WHERE p.profile_id=:profile AND p.archived_at IS NULL
+        """), {"profile": profile_id}).mappings().one_or_none()
+        if current is None:
+            raise ContextRepositoryError("not_found", "active profile not found", 404)
+        if current["current_revision_id"] != expected:
+            raise ContextRepositoryError("revision_conflict", "profile revision changed", 409)
+        fields = (
+            "birth_date", "sex", "timezone", "started_on",
+            "desired_sessions_per_week", "usual_place_id", "comment",
+        )
+        before = {
+            field: value.isoformat() if isinstance(value, date) else str(value)
+            if isinstance(value, UUID) else value
+            for field in fields for value in (current[field],)
+        }
+        after = payload["profile"]
+        if set(after) != set(fields):
+            raise ContextRepositoryError(
+                "validation_error", "profile update requires all profile fields", 422
+            )
+        if {key: str(value) for key, value in before.items()} == {
+            key: str(value) for key, value in after.items()
+        }:
+            raise ContextRepositoryError("validation_error", "profile has no changes", 422)
+        place_id = after.get("usual_place_id")
+        place_revision = None
+        if place_id is not None:
+            place_revision = self.session.execute(text("""
+                SELECT p.current_revision_id FROM trainer.training_places p
+                JOIN trainer.training_place_revisions r
+                  ON r.place_revision_id=p.current_revision_id
+                WHERE p.place_id=:place AND p.profile_id=:profile
+                  AND p.archived_at IS NULL AND p.logically_deleted_at IS NULL
+                  AND r.status='active'
+            """), {"place": place_id, "profile": profile_id}).scalar_one_or_none()
+            if place_revision is None:
+                raise ContextRepositoryError("validation_error", "usual place must be an active place of this profile", 422)
+        place_labels = {}
+        for selected_id in {before.get("usual_place_id"), place_id} - {None}:
+            name = self.session.execute(text("""
+                SELECT r.name FROM trainer.training_places p
+                JOIN trainer.training_place_revisions r ON r.place_revision_id=p.current_revision_id
+                WHERE p.place_id=:place AND p.profile_id=:profile
+            """), {"place": selected_id, "profile": profile_id}).scalar_one_or_none()
+            if name is None:
+                raise ContextRepositoryError("inconsistent_domain_state", "profile place is missing", 500)
+            place_labels[str(selected_id)] = name
+        now = datetime.now(UTC)
+        draft_id, revision_id, new_profile_revision = uuid4(), uuid4(), uuid4()
+        typed = {
+            "intent": "profile_update",
+            "context": payload["context"],
+            "profile_id": str(profile_id),
+            "expected_profile_revision_id": str(expected),
+            "before": before,
+            "after": after,
+            "place_labels": place_labels,
+            "change_plan": [{"object_type": "profile", "object_id": str(profile_id),
+                             "revision_id": str(new_profile_revision)}],
+        }
+        digest = digest_payload(typed)
+        self.session.execute(text("""
+            INSERT INTO trainer.drafts(draft_id,intent_type,owner_profile_id,state,
+                latest_revision_id,expires_at,created_at)
+            VALUES (:draft,'profile_update',:profile,'open',:revision,:expires,:now)
+        """), {"draft": draft_id, "profile": profile_id, "revision": revision_id,
+               "expires": now + timedelta(hours=24), "now": now})
+        self.session.execute(text("""
+            INSERT INTO trainer.draft_revisions(draft_revision_id,draft_id,revision_no,
+                typed_payload,content_digest,trust_state,confirmation_kind,created_at)
+            VALUES (:revision,:draft,1,CAST(:payload AS jsonb),:digest,'draft','normal',:now)
+        """), {"revision": revision_id, "draft": draft_id,
+               "payload": json.dumps(typed, default=str), "digest": digest, "now": now})
+        dependencies = [self._add_dependency(
+            revision_id, "profile", profile_id, expected,
+            "current profile must remain unchanged", now,
+        )]
+        if place_revision is not None:
+            dependencies.append(self._add_dependency(
+                revision_id, "training_place", UUID(str(place_id)), place_revision,
+                "usual place must remain current", now,
+            ))
+        response = {
+            "draft_id": str(draft_id), "revision_id": str(revision_id),
+            "revision_no": 1, "content_digest": digest,
+            "dependencies": dependencies, "gaps": [],
+            "preview_candidate": {"summary": "Изменение профиля готово к полному предпросмотру",
+                                  "confirmation_kind": "normal", "complete": True},
+        }
+        self._finish(operation_id, response)
+        self._audit(operation_id, "CMD-27", correlation_id, causation_id, key,
+                    [{"object_type": "draft", "object_id": str(draft_id),
+                      "revision_id": str(revision_id)}])
+        return response
+
     def create_goal_draft(
         self,
         *,
@@ -4555,6 +4666,8 @@ class ContextRepository:
             raise ContextRepositoryError("validation_error", "exercise details are available only for familiar batches", 422)
         if detail_level == "workout" and row["intent_type"] != "workout_import_batch":
             raise ContextRepositoryError("validation_error", "workout details are available only for import batches", 422)
+        if detail_level == "measurement" and row["intent_type"] != "measurement":
+            raise ContextRepositoryError("validation_error", "measurement details are available only for measurement drafts", 422)
         dependencies = [
             {
                 "dependency_type": item["dependency_type"],
@@ -4611,6 +4724,10 @@ class ContextRepository:
                 canonical_text = batch.render(canonical_payload)
         elif canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction"):
             canonical_text = self._render_workout_report_preview(presentation_payload)
+        elif row["intent_type"] == "measurement":
+            from trainer.infrastructure.db.measurement_preview import render as render_measurements
+
+            canonical_text = render_measurements(canonical_payload, detail_level=detail_level)
         else:
             canonical_text = self._render_preview(
                 presentation_payload, detail_level=detail_level,
@@ -4917,6 +5034,8 @@ class ContextRepository:
             raise ContextRepositoryError("not_found", "preview not found", 404)
         if row["intent_type"] == "onboarding" and row["detail_level"] == "full" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "profile_update" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "profile update preview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
         if row["intent_type"] == "workout_import_batch":
@@ -4928,6 +5047,11 @@ class ContextRepository:
                 raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
         if row["intent_type"] == "workout_report" and row["detail_level"] == "full" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
+        if row["intent_type"] == "measurement" and row["detail_level"] == "full":
+            from trainer.infrastructure.db.measurement_preview import render as render_measurements
+
+            if row["canonical_text"] != render_measurements(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "measurement preview changed; render it again", 409)
         if row["intent_type"] == "program":
             error = ContextRepositoryError(
                 "confirmation_not_supported", "technical program draft cannot be confirmed", 409
@@ -5223,6 +5347,8 @@ class ContextRepository:
             FamiliarBatchRepository(self).commit(
                 typed, confirmation_id, commit_result_id, changes, now
             )
+        elif typed.get("intent") == "profile_update":
+            self._commit_profile_update(typed, confirmation_id, commit_result_id, changes, now)
         elif "profile_id" in typed:
             self._commit_onboarding(typed, confirmation_id, commit_result_id, changes, now)
         elif typed.get("intent") in ("create", "correct") and "exercise" in typed:
@@ -7737,7 +7863,7 @@ class ContextRepository:
         self._require_catalog_code(
             table="goal_type_catalog", value=goal.get("goal_type"),
             path=f"{path}.goal_type", error_code="unsupported_goal_type",
-            message="Use performance or strength for the goal type.",
+            message="Use performance, strength, or body_weight for the goal type.",
         )
         self._require_catalog_code(
             table="unit_catalog", value=goal.get("unit_code"),
@@ -7984,6 +8110,65 @@ class ContextRepository:
             ],
         }
         self._insert_change(changes[0], result, "create", None, profile_snapshot, None, now)
+
+    def _commit_profile_update(
+        self, typed: dict[str, Any], confirmation: UUID, result: UUID,
+        changes: list[dict[str, Any]], now: datetime,
+    ) -> None:
+        profile_id = UUID(typed["profile_id"])
+        expected = UUID(typed["expected_profile_revision_id"])
+        row = self.session.execute(text("""
+            SELECT current_revision_id FROM trainer.profiles
+            WHERE profile_id=:profile AND archived_at IS NULL FOR UPDATE
+        """), {"profile": profile_id}).scalar_one_or_none()
+        if row != expected:
+            raise ContextRepositoryError("stale_preview", "profile changed after preview", 409)
+        after = typed["after"]
+        place_id = after.get("usual_place_id")
+        if place_id is not None:
+            place = self.session.execute(text("""
+                SELECT p.place_id FROM trainer.training_places p
+                JOIN trainer.training_place_revisions r
+                  ON r.place_revision_id=p.current_revision_id
+                WHERE p.place_id=:place AND p.profile_id=:profile
+                  AND p.archived_at IS NULL AND p.logically_deleted_at IS NULL
+                  AND r.status='active' FOR UPDATE OF p
+            """), {"place": place_id, "profile": profile_id}).scalar_one_or_none()
+            if place is None:
+                raise ContextRepositoryError("stale_preview", "usual place changed after preview", 409)
+        change = changes[0]
+        new_revision = UUID(change["revision_id"])
+        revision_no = self.session.execute(text("""
+            SELECT revision_no FROM trainer.profile_revisions
+            WHERE profile_revision_id=:revision AND profile_id=:profile
+        """), {"revision": expected, "profile": profile_id}).scalar_one()
+        self.session.execute(text("""
+            INSERT INTO trainer.profile_revisions(
+                profile_revision_id,profile_id,revision_no,supersedes_revision_id,
+                birth_date,sex,timezone,started_on,desired_sessions_per_week,
+                usual_place_id,comment,source_kind,confirmation_id,confirmed_at,created_at)
+            VALUES (:revision,:profile,:number,:previous,:birth,:sex,:timezone,
+                :started,:sessions,:place,:comment,'user',:confirmation,:now,:now)
+        """), {"revision": new_revision, "profile": profile_id,
+               "number": revision_no + 1, "previous": expected,
+               "birth": after.get("birth_date"), "sex": after.get("sex"),
+               "timezone": after["timezone"], "started": after.get("started_on"),
+               "sessions": after.get("desired_sessions_per_week"),
+               "place": place_id, "comment": after.get("comment"),
+               "confirmation": confirmation, "now": now})
+        self.session.execute(text("""
+            INSERT INTO trainer.profile_familiar_exercises(
+                profile_revision_id,exercise_id,exercise_revision_id,created_at)
+            SELECT :new_revision,exercise_id,exercise_revision_id,:now
+            FROM trainer.profile_familiar_exercises
+            WHERE profile_revision_id=:previous
+        """), {"new_revision": new_revision, "previous": expected, "now": now})
+        self.session.execute(text("""
+            UPDATE trainer.profiles SET current_revision_id=:revision
+            WHERE profile_id=:profile AND current_revision_id=:previous
+        """), {"revision": new_revision, "profile": profile_id, "previous": expected})
+        self._insert_change(change, result, "correct", typed["before"], after,
+                            "confirmed profile update", now)
 
     def _commit_goal(
         self,
@@ -9099,6 +9284,7 @@ class ContextRepository:
                 "strength": "силовая цель",
                 "endurance": "цель на выносливость",
                 "body_composition": "цель по составу тела",
+                "body_weight": "цель по массе тела",
             },
             "place_type": {
                 "home": "дом",
@@ -9171,6 +9357,30 @@ class ContextRepository:
         payload: dict[str, Any], *, detail_level: str = "full",
         entry_name: str | None = None,
     ) -> str:
+        if payload.get("intent") == "profile_update":
+            fields = (
+                "birth_date", "sex", "timezone", "started_on",
+                "desired_sessions_per_week", "usual_place_id", "comment",
+            )
+            labels = {key: ContextRepository._preview_field_label(key) for key in fields}
+            lines = ["Изменение существующего профиля", "Было:"]
+            for key in fields:
+                value = payload["before"].get(key)
+                if key == "usual_place_id" and value is not None:
+                    value = payload["place_labels"][str(value)]
+                elif isinstance(value, str):
+                    value = ContextRepository._preview_value_label(key, value)
+                lines.append(f"• {labels[key]}: {value if value is not None else 'не указано'}")
+            lines.append("Станет:")
+            for key in fields:
+                value = payload["after"].get(key)
+                if key == "usual_place_id" and value is not None:
+                    value = payload["place_labels"][str(value)]
+                elif isinstance(value, str):
+                    value = ContextRepository._preview_value_label(key, value)
+                lines.append(f"• {labels[key]}: {value if value is not None else 'не указано'}")
+            lines.append("Изменения пока не сохранены.")
+            return "\n".join(lines)
         if all(key in payload for key in ("profile", "goals", "places", "equipment", "familiar_exercises")):
             if detail_level in {"full", "short"}:
                 return ContextRepository._render_onboarding_overview(payload)
@@ -9297,7 +9507,15 @@ class ContextRepository:
                 "текущий результат не указан"
                 if start is None else f"текущий результат {start} {unit}".rstrip()
             )
+            if goal.get("goal_type") == "body_weight":
+                target_text = f"целевой вес {target} {unit}".rstrip()
+                start_text = (
+                    "исходный вес не указан"
+                    if start is None else f"исходный вес со слов пользователя {start} {unit}".rstrip()
+                )
             lines.append(f"Цель {index}: «{name}»; {target_text} к {target_date}; {start_text.rstrip('.')}.")
+            if goal.get("goal_type") == "body_weight":
+                lines.append("Эта цель не создаёт отдельный замер тела; фактический вес подтверждается отдельно.")
         usual_id = profile.get("usual_place_id")
         usual = next(
             (place.get("name") for place in places if isinstance(place, dict)
@@ -9523,6 +9741,7 @@ class ContextDatabaseExecutor:
     def record_failed_attempt(self, action: str, kwargs: dict[str, Any], error: Exception) -> None:
         method_by_action = {
             "create_onboarding_draft": "CMD-01",
+            "create_profile_update_draft": "CMD-27",
             "create_goal_draft": "CMD-02",
             "create_inventory_change_draft": "CMD-09",
             "create_measurement_session_draft": "CMD-11",

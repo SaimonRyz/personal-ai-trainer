@@ -4,6 +4,7 @@ import hashlib
 import json
 from copy import deepcopy
 from datetime import date
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
 
@@ -37,13 +38,13 @@ def materialize_onboarding_defaults(payload: dict[str, Any]) -> dict[str, Any]:
 def validate_goal(goal: dict[str, Any], *, path: str = "goal") -> None:
     if not str(goal.get("name", "")).strip():
         raise DomainValidationError("goal name is required")
-    if goal.get("goal_type") not in {"performance", "strength"}:
+    if goal.get("goal_type") not in {"performance", "strength", "body_weight"}:
         raise DomainValidationError(
-            "unsupported goal type; use performance or strength",
+            "unsupported goal type; use performance, strength, or body_weight",
             field_errors=[{
                 "path": f"{path}.goal_type",
                 "code": "unsupported_goal_type",
-                "message_safe": "Use performance or strength.",
+                "message_safe": "Use performance, strength, or body_weight.",
             }],
         )
     set_on = date.fromisoformat(str(goal["set_on"]))
@@ -58,6 +59,42 @@ def validate_goal(goal: dict[str, Any], *, path: str = "goal") -> None:
     values_present = goal.get("start_value") is not None or goal.get("target_value") is not None
     if values_present and goal.get("unit_code") is None:
         raise DomainValidationError("unit_code is required for numeric goal values")
+    if goal["goal_type"] == "body_weight":
+        if goal.get("unit_code") != "kilogram":
+            raise DomainValidationError(
+                "body_weight goal requires kilogram",
+                field_errors=[{
+                    "path": f"{path}.unit_code",
+                    "code": "incompatible_goal_unit",
+                    "message_safe": "Use kilogram for a body_weight goal.",
+                }],
+            )
+        if goal.get("target_value") is None:
+            raise DomainValidationError(
+                "body_weight goal requires a target value",
+                field_errors=[{
+                    "path": f"{path}.target_value",
+                    "code": "required_goal_target",
+                    "message_safe": "Set a target body weight in kilograms.",
+                }],
+            )
+        for field in ("start_value", "target_value"):
+            value = goal.get(field)
+            if value is None:
+                continue
+            try:
+                numeric = Decimal(str(value))
+            except InvalidOperation:
+                numeric = Decimal("NaN")
+            if not numeric.is_finite() or numeric <= 0:
+                raise DomainValidationError(
+                    "body_weight goal value must be positive",
+                    field_errors=[{
+                        "path": f"{path}.{field}",
+                        "code": "invalid_goal_value",
+                        "message_safe": "Use a positive body weight in kilograms.",
+                    }],
+                )
 
 
 def validate_onboarding(payload: dict[str, Any]) -> None:

@@ -166,6 +166,16 @@ MIGRATIONS = (
         "8bf04dd86bc9d83c1a2c7e471deb09bcde39b36b713f4a90aa162f6d90e429eb",
         "0027_workout_import_batch.py",
     ),
+    MigrationSpec(
+        "0028_body_weight_goal_type",
+        "5fa2a01f7ea1a5b08fab85dacd29cdcfa20c536e115f588b2d6d691f836651bb",
+        "0028_body_weight_goal_type.py",
+    ),
+    MigrationSpec(
+        "0029_profile_update",
+        "f838ab035788566b27a3cbb41dd1ea63839adc02823ef4127f1462a9941f1a7c",
+        "0029_profile_update.py",
+    ),
 )
 
 

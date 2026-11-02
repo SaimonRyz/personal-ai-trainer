@@ -65,6 +65,80 @@ def draft_body() -> dict[str, object]:
     }
 
 
+def test_minimal_mass_draft_accepts_omitted_unknowns_and_reports_bad_fields() -> None:
+    calls: list[dict[str, Any]] = []
+
+    def executor(**kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {
+            "draft_id": str(uuid4()),
+            "revision_id": str(uuid4()),
+            "revision_no": 1,
+            "content_digest": "a" * 64,
+            "dependencies": [],
+            "gaps": [],
+            "preview_candidate": {"summary": "synthetic preview", "complete": True, "confirmation_kind": "normal"},
+        }
+
+    client = TestClient(
+        create_app(Settings(api_token=SecretStr(TOKEN)), context_service=ContextService(executor))
+    )
+    body = {
+        "context": context(),
+        "intent": "create",
+        "session": {
+            "measured_on": "2026-11-02",
+            "conditions": "Morning before food",
+            "values": [
+                {"measurement_kind": "body_mass", "original_value": "77", "original_unit": "kilogram"}
+            ],
+        },
+    }
+    normalized = TypeAdapter(MeasurementDraftRequest).validate_python(
+        {**body, "request_digest": "0" * 64}
+    ).model_dump(mode="json")
+    assert normalized["session"]["values"][0]["side"] is None
+    normalized.pop("request_digest")
+    normalized["request_digest"] = digest_payload(normalized)
+    response = client.post(
+        "/api/v1/commands/measurement-session-drafts", json=normalized, headers=headers(command=True)
+    )
+    assert response.status_code == 200, response.json()
+    assert len(calls) == 1
+
+    invalid = deepcopy(normalized)
+    invalid["session"]["values"][0]["original_unit"] = "centimeter"  # type: ignore[index]
+    response = client.post(
+        "/api/v1/commands/measurement-session-drafts", json=invalid, headers=headers(command=True)
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["field_errors"][0]["path"] == "session.values[0].original_unit"
+    assert "kilogram or pound" in response.json()["error"]["field_errors"][0]["message_safe"]
+
+    missing = deepcopy(normalized)
+    del missing["session"]["values"][0]["original_value"]  # type: ignore[index]
+    response = client.post(
+        "/api/v1/commands/measurement-session-drafts", json=missing, headers=headers(command=True)
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["field_errors"] == [
+        {
+            "path": "session.values[0].original_value",
+            "code": "missing",
+            "message_safe": "Required field is missing.",
+        }
+    ]
+
+    revised = deepcopy(normalized)
+    revised["draft_id"] = str(uuid4())
+    try:
+        TypeAdapter(MeasurementDraftRequest).validate_python(revised)
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("measurement revision requires expected_revision_id")
+
+
 def headers(*, command: bool) -> dict[str, str]:
     result = {
         "Authorization": f"Bearer {TOKEN}",

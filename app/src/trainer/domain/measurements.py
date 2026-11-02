@@ -53,7 +53,8 @@ def normalize_value(value: dict[str, Any], path: str) -> dict[str, Any]:
     if kind not in KINDS:
         raise DomainValidationError(f"{path}.measurement_kind: unsupported type")
     if unit not in (MASS_UNITS if kind == MASS else LENGTH_UNITS):
-        raise DomainValidationError(f"{path}.original_unit: incompatible unit")
+        allowed = "kilogram or pound" if kind == MASS else "centimeter, millimeter, or inch"
+        raise DomainValidationError(f"{path}.original_unit: use {allowed} for {kind}")
     if (kind in PAIRED and side not in ("left", "right")) or (
         kind not in PAIRED and side is not None
     ):

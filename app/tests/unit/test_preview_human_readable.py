@@ -355,6 +355,7 @@ def test_exercise_correction_preview_shows_complete_before_and_after() -> None:
 
 
 def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_empty_lists() -> None:
+    # A fictional strength goal, unrelated to any user's stated target.
     profile_id = str(uuid4())
     goal_id = str(uuid4())
     place_id = str(uuid4())
@@ -375,11 +376,11 @@ def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_emp
                 "goal_id": goal_id,
                 "name": "Силовой результат",
                 "goal_type": "strength",
-                "start_value": "80",
-                "target_value": "100",
+                "start_value": "91",
+                "target_value": "132",
                 "unit_code": "kg",
-                "set_on": "2026-10-23",
-                "target_date": "2027-10-23",
+                "set_on": "2024-04-19",
+                "target_date": "2028-04-19",
                 "priority": 1,
                 "status": "active",
             }
@@ -399,7 +400,7 @@ def test_onboarding_preview_labels_profile_goal_and_usual_place_and_explains_emp
     for visible in (
         "Первое знакомство: пока ничего не сохранено.",
         "1 профиль, 1 цель, 1 место занятий, 0 позиций инвентаря",
-        "Цель 1: «Силовой результат»; целевой результат 100 кг к 23 октября 2027 года; текущий результат 80 кг.",
+        "Цель 1: «Силовой результат»; целевой результат 132 кг к 19 апреля 2028 года; текущий результат 91 кг.",
         "обычное место «Зал»; 3 раза в неделю; часовой пояс UTC",
         "Примечание к профилю: Synthetic profile note",
         "Оборудование: нет.",
