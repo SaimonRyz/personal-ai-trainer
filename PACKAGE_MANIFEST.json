@@ -15,8 +15,8 @@
       "sha256": "8c376cd4499d6b1311e15e23e502645e706219b205d2c86bba6b160c08192af3"
     },
     "DEVELOPMENT.md": {
-      "size": 5316,
-      "sha256": "2942b6888080d5a923ea6f6d40d5fd0013346fbe14d146289d57810ab66e95f0"
+      "size": 5140,
+      "sha256": "b1b889d1246e9779950e70e8684593cad2a4a1689b46f8258dcc23653dd73aa3"
     },
     "FAMILIAR_EXERCISE_BATCH.md": {
       "size": 7860,
@@ -95,8 +95,8 @@
       "sha256": "7d49abff922c03683a078d04a46de299030cc5a03e7f39b79f2c0959e69bd867"
     },
     "app/distribution-draft/RELEASE_CHECKLIST.md": {
-      "size": 5706,
-      "sha256": "a5864fb597e8aafb99b049f58f60438de351d3d9f11e7cb521cc6c2dca5e1bc6"
+      "size": 5790,
+      "sha256": "a18701c3d96b992836bb3db42d114c185236472cf41c93778ff816314a14d73e"
     },
     "app/distribution-draft/RELEASE_INPUTS.json": {
       "size": 1953,
