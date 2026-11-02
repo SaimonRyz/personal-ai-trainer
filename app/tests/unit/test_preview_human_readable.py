@@ -675,53 +675,45 @@ def test_preview_text_is_deterministic_for_equivalent_mapping_key_orders() -> No
     assert "Новое состояние:" not in ContextRepository._render_preview(first)
 
 
-def test_publication_preview_shows_program_period_exercise_and_dependencies() -> None:
-    goal_id = str(uuid4())
-    exercise_id = str(uuid4())
-    version_id = str(uuid4())
+def test_publication_preview_shows_program_decision_without_service_data() -> None:
+    from trainer.infrastructure.db.program_publication_preview import render
+
+    exercise_revision = str(uuid4())
     payload = {
-        "intent": "publication",
         "publication_source": {
-            "program_id": str(uuid4()),
-            "program_name": "Базовая сила",
-            "program_version_id": version_id,
-            "version_label": "Осенний цикл",
-            "period_start": "2026-10-01",
-            "period_end": "2026-12-31",
-            "goal": {"goal_id": goal_id, "name": "Подтягивания", "target_date": "2026-12-01"},
-            "template": {
-                "exercises": [{"exercise_id": exercise_id, "canonical_name": "Подтягивание"}]
+            "intent": "create",
+            "goal_revision_id": str(uuid4()),
+            "program_snapshot": {"name": "Вымышленный цикл", "starts_on": "2030-01-01", "ends_on": "2030-02-28"},
+            "version": {
+                "version_label": "Начало", "period_start": "2030-01-01", "period_end": "2030-02-28",
+                "rationale": "Постепенно увеличивать объём",
+                "templates": [{"position": 1, "purpose": "Общая сила", "blocks": [{
+                    "position": 1, "block_type_code": "straight", "exercises": [{
+                        "position": 1, "exercise_ref": {"revision_id": exercise_revision},
+                        "sets": [{"position": 1, "logical_set_no": 1, "set_type_code": "working",
+                                  "side": "both", "metrics": [{"metric_kind": "repetitions", "exact_value": "6", "unit_code": "repetition"}]}],
+                    }],
+                }]}],
+                "recommendations": [{"decision_text": "Добавлять нагрузку постепенно", "short_explanation": "По самочувствию",
+                                     "revisit_condition": "после четырёх недель", "confidence": "moderate",
+                                     "assumptions": {}, "alternatives": {}}],
             },
+            "gaps": [],
         },
-        "change_plan": [
-            {"object_type": "program_version", "object_id": version_id, "revision_id": version_id}
-        ],
+        "equipment_inventory_snapshot": [{"name": "НЕ ДОЛЖНО ПОПАСТЬ В ТЕКСТ"}],
         "dependencies": [
-            {
-                "dependency_type": "exercise",
-                "object_id": exercise_id,
-                "revision_id": str(uuid4()),
-                "digest": "b" * 64,
-                "reason": "exact program exercise revision",
-            }
+            {"reason": "exact current global inventory revision", "digest": "b" * 64}
         ],
     }
-
-    rendered = ContextRepository._render_preview(payload)
-
+    rendered = render(payload, goal={"name": "Вымышленная цель", "target_value": 10, "unit_code": "repetition", "target_date": "2030-02-28"}, names={exercise_revision: "Вымышленное упражнение"})
     for visible in (
-        "Базовая сила",
-        "Осенний цикл",
-        "2026-10-01",
-        "2026-12-31",
-        "Подтягивание",
-        "Изменяемые объекты",
-        "Основания и зависимости",
+        "Вымышленный цикл", "Начало", "2030-01-01", "2030-02-28",
+        "Вымышленная цель", "Вымышленное упражнение", "Подход 1", "6 раз",
+        "Добавлять нагрузку постепенно", "После подтверждения программа",
     ):
         assert visible in rendered
-    for service_id in (goal_id, exercise_id, version_id):
-        assert service_id not in rendered
-    assert "{" not in rendered and "}" not in rendered
+    for hidden in (exercise_revision, "НЕ ДОЛЖНО", "exact current global inventory revision", "digest"):
+        assert hidden not in rendered
 
 
 def test_calculation_preview_shows_source_dates_values_and_unknowns() -> None:

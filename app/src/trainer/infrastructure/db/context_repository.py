@@ -4728,6 +4728,8 @@ class ContextRepository:
             from trainer.infrastructure.db.measurement_preview import render as render_measurements
 
             canonical_text = render_measurements(canonical_payload, detail_level=detail_level)
+        elif row["intent_type"] == "program_publication":
+            canonical_text = self._render_program_publication_preview(canonical_payload)
         else:
             canonical_text = self._render_preview(
                 presentation_payload, detail_level=detail_level,
@@ -4836,6 +4838,8 @@ class ContextRepository:
             raise ContextRepositoryError("incomplete_preview", "preview must be full", 400)
         if row["intent_type"] == "onboarding" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "program_publication" and row["canonical_text"] != self._render_program_publication_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "program publication preview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
         if row["intent_type"] == "workout_import_batch":
@@ -5034,6 +5038,8 @@ class ContextRepository:
             raise ContextRepositoryError("not_found", "preview not found", 404)
         if row["intent_type"] == "onboarding" and row["detail_level"] == "full" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "program_publication" and row["detail_level"] == "full" and row["canonical_text"] != self._render_program_publication_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "program publication preview changed; render it again", 409)
         if row["intent_type"] == "profile_update" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "profile update preview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
@@ -9351,6 +9357,33 @@ class ContextRepository:
         if "goal" in payload:
             return "Полное описание цели"
         return "Полное описание изменений"
+
+    def _render_program_publication_preview(self, payload: dict[str, Any]) -> str:
+        from trainer.infrastructure.db.program_publication_preview import render
+
+        source = payload["publication_source"]
+        goal = self.session.execute(
+            text("SELECT name,target_value,unit_code,target_date FROM trainer.goal_revisions WHERE goal_revision_id=:revision"),
+            {"revision": UUID(str(source["goal_revision_id"]))},
+        ).mappings().one_or_none()
+        if goal is None:
+            raise ContextRepositoryError("stale_preview", "program goal is unavailable", 409)
+        revisions = {
+            str(exercise["exercise_ref"]["revision_id"])
+            for day in source["version"]["templates"]
+            for block in day["blocks"]
+            for exercise in block["exercises"]
+        }
+        names: dict[str, str] = {}
+        for revision in revisions:
+            name = self.session.execute(
+                text("SELECT canonical_name FROM trainer.exercise_revisions WHERE exercise_revision_id=:revision"),
+                {"revision": UUID(revision)},
+            ).scalar_one_or_none()
+            if name is None:
+                raise ContextRepositoryError("stale_preview", "program exercise is unavailable", 409)
+            names[revision] = name
+        return render(payload, goal=dict(goal), names=names)
 
     @staticmethod
     def _render_preview(
