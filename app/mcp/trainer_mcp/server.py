@@ -22,6 +22,7 @@ from trainer_mcp.contracts import (
     WorkoutImportBatchEntry,
     GoalInput,
     PlaceInput,
+    PlanRecommendationInput,
     PlanTreeInput,
     ProfileInput,
     ProgramIdentityInput,
@@ -721,10 +722,13 @@ def create_plan_draft(
     idempotency_key: IdempotencyKey,
     plan: PlanTreeInput,
     recommendations: Annotated[
-        list[ProgramRecommendationInput], Field(min_length=1, max_length=100)
+        list[PlanRecommendationInput], Field(min_length=1, max_length=100)
     ],
 ) -> dict[str, Any]:
-    """Create a plan draft with exact recommendation evidence; does not confirm it."""
+    """Create a plan draft with exact evidence, without confirming it.
+
+    recommendation_kind: plan_structure or exercise_selection.
+    """
     body = {
         "context": context(conversation_id, message_id, timezone),
         "plan": json_model(plan),

@@ -166,6 +166,11 @@ MIGRATIONS = (
         "8bf04dd86bc9d83c1a2c7e471deb09bcde39b36b713f4a90aa162f6d90e429eb",
         "0027_workout_import_batch.py",
     ),
+    MigrationSpec(
+        "0028_plan_recommendation_kinds",
+        "8743a58fe467b13510b07140f9516d97920d1d11f319b7b3509164eb8cf789df",
+        "0028_plan_recommendation_kinds.py",
+    ),
 )
 
 

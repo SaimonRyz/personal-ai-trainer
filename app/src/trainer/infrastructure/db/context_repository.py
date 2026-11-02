@@ -2897,7 +2897,12 @@ class ContextRepository:
                 ).first()
                 is None
             ):
-                raise ContextRepositoryError("validation_error", "unknown recommendation kind", 422)
+                raise ContextRepositoryError(
+                    "validation_error",
+                    f"recommendations[{index}].recommendation_kind must be "
+                    "plan_structure or exercise_selection",
+                    422,
+                )
             recommendation["recommendation_id"] = recommendation.get("recommendation_id") or str(
                 uuid4()
             )
