@@ -4619,6 +4619,8 @@ class ContextRepository:
                 )
             else:
                 canonical_text = batch.render(canonical_payload)
+        elif row["intent_type"] == "plan":
+            canonical_text = self._render_plan_preview(presentation_payload)
         elif canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction"):
             canonical_text = self._render_workout_report_preview(presentation_payload)
         else:
@@ -9231,6 +9233,57 @@ class ContextRepository:
                     )
                 names[revision] = name
         return render_workout_report(payload, names)
+
+    def _render_plan_preview(self, payload: dict[str, Any]) -> str:
+        from trainer.infrastructure.db.plan_preview import render_plan
+
+        place_name = None
+        place = payload["plan"].get("temporary_conditions", {}).get("place")
+        if isinstance(place, dict) and place.get("kind") == "saved":
+            ref = place.get("place_ref") or {}
+            if not ref.get("revision_id") or not ref.get("object_id"):
+                raise ContextRepositoryError(
+                    "incomplete_preview", "saved place has no exact revision", 409
+                )
+            place_name = self.session.execute(text("""
+                SELECT name FROM trainer.training_place_revisions
+                WHERE place_revision_id=:revision AND place_id=:place
+            """), {
+                "revision": UUID(str(ref["revision_id"])),
+                "place": UUID(str(ref["object_id"])),
+            }).scalar_one_or_none()
+            if not isinstance(place_name, str) or not place_name.strip():
+                raise ContextRepositoryError(
+                    "incomplete_preview", "exact saved place name is unavailable", 409
+                )
+        names: dict[str, str] = {}
+        for block in payload["plan"]["blocks"]:
+            for exercise in block["exercises"]:
+                ref = exercise.get("exercise_ref") or {}
+                revision = str(ref.get("revision_id") or "")
+                if not revision or str(ref.get("object_id")) != str(exercise["exercise_id"]):
+                    raise ContextRepositoryError(
+                        "incomplete_preview", "planned exercise has no exact revision", 409
+                    )
+                if revision in names:
+                    continue
+                name = self.session.execute(text("""
+                    SELECT canonical_name FROM trainer.exercise_revisions
+                    WHERE exercise_revision_id=:revision AND exercise_id=:exercise
+                """), {
+                    "revision": UUID(revision), "exercise": UUID(str(exercise["exercise_id"])),
+                }).scalar_one_or_none()
+                if not isinstance(name, str) or not name.strip():
+                    raise ContextRepositoryError(
+                        "incomplete_preview", "exact planned exercise name is unavailable", 409
+                    )
+                names[revision] = name
+        try:
+            return render_plan(payload, names, place_name=place_name)
+        except (KeyError, TypeError, ValueError) as error:
+            raise ContextRepositoryError(
+                "incomplete_preview", "planned workout cannot be rendered unambiguously", 409
+            ) from error
 
     @staticmethod
     def _render_onboarding_overview(payload: dict[str, Any]) -> str:

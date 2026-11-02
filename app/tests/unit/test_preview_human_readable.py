@@ -12,8 +12,62 @@ import pytest
 from trainer.infrastructure.db.calculations import CalculationRepository
 from trainer.infrastructure.db.context_repository import ContextRepository, ContextRepositoryError
 from trainer.infrastructure.db.evidence import EvidenceRepository
+from trainer.infrastructure.db.plan_preview import render_plan
 
 SERVICE_ID = str(uuid4())
+
+
+def test_plan_preview_binds_exact_names_to_each_set_and_rejects_missing_name() -> None:
+    first, second = str(uuid4()), str(uuid4())
+    payload = {
+        "plan": {
+            "name": "Первая тренировка", "planned_date": "2026-11-03",
+            "planned_time": None, "purpose": "Спокойное начало", "comment": None,
+            "program_id": None,
+            "temporary_conditions": {
+                "place": None, "equipment_additions": [], "equipment_removals": [],
+            },
+            "blocks": [{
+                "position": 1, "block_type_code": "straight", "name": None,
+                "declared_rounds": None, "rest_seconds": 60, "comment": None,
+                "exercises": [
+                    {
+                        "position": position, "exercise_id": revision,
+                        "exercise_ref": {"revision_id": revision}, "sets": [{
+                            "position": 1, "logical_set_no": 1, "round_no": None,
+                            "set_type_code": "working", "side": "both",
+                            "metrics": [{"metric_kind": "repetitions", "exact_value": str(reps),
+                                         "unit_code": "repetition"}],
+                            "loads": [], "rest_after_seconds": rest,
+                        }],
+                    }
+                    for position, revision, reps, rest in (
+                        (1, first, 5, 30), (2, second, 8, 45)
+                    )
+                ],
+            }],
+        },
+        "recommendations": [{
+            "recommendation_kind": "plan_structure",
+            "decision_text": "Начать с умеренного объёма",
+            "confidence": "insufficient",
+            "short_explanation": "Проверенных выводов пока нет",
+            "revisit_condition": "После первой тренировки",
+            "assumptions": {}, "alternatives": {}, "fact_links": [],
+            "calculation_links": [], "conclusion_links": [],
+        }],
+    }
+    names = {first: "Отжимания от пола", second: "Приседания без отягощения"}
+    rendered = render_plan(payload, names)
+    first_section = rendered.split("Упражнение 1: Отжимания от пола", 1)[1].split(
+        "Упражнение 2:", 1
+    )[0]
+    second_section = rendered.split("Упражнение 2: Приседания без отягощения", 1)[1]
+    assert "точно 5 повт." in first_section and "отдых после подхода 30 с" in first_section
+    assert "точно 8 повт." in second_section and "отдых после подхода 45 с" in second_section
+    assert "Context snapshot" not in rendered and len(rendered) < 2_000
+    with pytest.raises(ValueError, match="exact exercise name"):
+        render_plan(payload, {first: names[first]})
 
 
 @pytest.mark.parametrize(
