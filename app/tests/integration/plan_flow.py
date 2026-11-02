@@ -111,6 +111,10 @@ def post_with_status(
             mode="json"
         )
         normalized.pop("request_digest", None)
+        if model is PreviewRequest:
+            for optional in ("entry_name", "entry_key"):
+                if normalized.get(optional) is None:
+                    normalized.pop(optional)
         body = {**normalized, "request_digest": digest_payload(normalized)}
     headers = {
         "Accept": "application/json",
@@ -222,6 +226,18 @@ def current_plan(plan_id: str) -> dict[str, Any]:
             {"context": context("read-" + str(uuid4())), "mode": "current", "plan_id": plan_id},
         )["data"],
     )
+
+
+def logical_tree(value: Any) -> Any:
+    """Compare plan content while ignoring IDs assigned to copied child rows."""
+    if isinstance(value, list):
+        return [logical_tree(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: logical_tree(item) for key, item in value.items()
+            if key == "exercise_id" or not key.endswith("_id")
+        }
+    return value
 
 
 def program_version_input(version: dict[str, Any]) -> dict[str, Any]:
@@ -918,6 +934,114 @@ def create_plan(
     return {"plan_id": created["object_id"], "revision_id": created["revision_id"], "name": name}
 
 
+def assert_multi_exercise_preview() -> None:
+    """The confirmation text must bind exact catalog names to their own sets."""
+    with ENGINE.connect() as db:
+        exercises = list(db.execute(text("""
+            SELECT e.exercise_id, r.exercise_revision_id, r.canonical_name, r.unilateral
+            FROM trainer.exercises e
+            JOIN trainer.exercise_revisions r ON r.exercise_revision_id=e.current_revision_id
+            WHERE r.status_code='active'
+              AND EXISTS (
+                SELECT 1 FROM trainer.exercise_measurements m
+                WHERE m.exercise_revision_id=r.exercise_revision_id
+                  AND m.metric_kind='repetitions' AND m.requiredness='required'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM trainer.exercise_measurements m
+                WHERE m.exercise_revision_id=r.exercise_revision_id
+                  AND m.requiredness='required' AND m.metric_kind<>'repetitions'
+              )
+              AND NOT EXISTS (
+                SELECT 1 FROM trainer.exercise_equipment_requirements q
+                WHERE q.exercise_revision_id=r.exercise_revision_id
+              )
+            ORDER BY r.canonical_name LIMIT 2
+        """)).mappings())
+    assert len(exercises) == 2, "isolated gate needs two distinct eligible exercises"
+    block_exercises = []
+    for position, row in enumerate(exercises, start=1):
+        block_exercises.append({
+            "position": position,
+            "exercise_id": str(row["exercise_id"]),
+            "circuit_position": None,
+            "comment": None,
+            "sets": [{
+                "position": 1,
+                "round_no": None,
+                "logical_set_no": 1,
+                "side": "left" if row["unilateral"] else "both",
+                "set_type_code": "working",
+                "target_rpe_min": None,
+                "target_rpe_max": None,
+                "target_rir_min": None,
+                "target_rir_max": None,
+                "tempo": None,
+                "pause_seconds": None,
+                "rest_after_seconds": 20 * position,
+                "metrics": [{
+                    "metric_kind": "repetitions",
+                    "exact_value": str(3 * position),
+                    "min_value": None,
+                    "max_value": None,
+                    "unit_code": "repetition",
+                    "custom_definition": None,
+                }],
+                "loads": [],
+            }],
+        })
+    draft = post(
+        "/api/v1/commands/plan-drafts",
+        {
+            "context": context("multi-exercise-preview-draft"),
+            "plan": {
+                "planned_date": (datetime.now(UTC).date() + timedelta(days=2)).isoformat(),
+                "planned_time": None,
+                "program_id": None,
+                "program_version_id": None,
+                "day_template_id": None,
+                "plan_type": "training",
+                "name": "Synthetic multi-exercise preview",
+                "purpose": "Check exact names and sets",
+                "comment": None,
+                "temporary_conditions": {
+                    "place": None, "equipment_additions": [], "equipment_removals": [],
+                },
+                "blocks": [{
+                    "position": 1,
+                    "block_type_code": "straight",
+                    "name": "Two exercises",
+                    "declared_rounds": None,
+                    "rest_seconds": 60,
+                    "comment": None,
+                    "exercises": block_exercises,
+                }],
+            },
+            "recommendations": insufficient_recommendations(ENGINE),
+        },
+        "multi-exercise-preview-draft",
+    )["data"]
+    shown = post(
+        "/api/v1/commands/previews",
+        {
+            "context": context("multi-exercise-preview-render"),
+            "revision_id": draft["revision_id"],
+            "detail_level": "full",
+        },
+        "multi-exercise-preview-render",
+    )["data"]
+    assert shown["complete"] is True
+    text_value = shown["canonical_text"]
+    assert len(text_value) < 10_000
+    assert "Context snapshot" not in text_value
+    for position, row in enumerate(exercises, start=1):
+        section = text_value.split(f"Упражнение {position}: {row['canonical_name']}", 1)[1]
+        if position < len(exercises):
+            section = section.split(f"Упражнение {position + 1}:", 1)[0]
+        assert f"точно {3 * position} повт." in section
+        assert f"отдых после подхода {20 * position} с" in section
+
+
 def lifecycle_request(
     source: dict[str, str], intent: str, prefix: str, replacement: dict[str, Any] | None = None
 ) -> dict[str, Any]:
@@ -1298,11 +1422,12 @@ def main() -> None:
 
     for action, offset in (("cancel", 4), ("miss", 5)):
         untouched = create_plan(action, exercise_id, exercise["unilateral"], metrics, offset)
+        before_tree = current_plan(untouched["plan_id"])["tree"]["blocks"]
         terminal = transition(untouched, action, action + "-lifecycle")
         current = current_plan(untouched["plan_id"])
         assert current["lifecycle"] == {"cancel": "cancelled", "miss": "missed"}[action]
         assert current["plan_ref"]["revision_id"] == terminal["source_revision_id"]
-        assert current["tree"]["blocks"] == exact["tree"]["blocks"]
+        assert logical_tree(current["tree"]["blocks"]) == logical_tree(before_tree)
 
     with ENGINE.connect() as db:
         assert (
@@ -1321,6 +1446,7 @@ def main() -> None:
             ).scalar_one()
             == 8
         )
+    assert_multi_exercise_preview()
     print(
         "PASS: D-G05 planning context, create-only plan, exact/current read, lifecycle, reschedule provenance, idempotency, and no workout fact"
     )

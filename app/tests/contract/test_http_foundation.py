@@ -31,6 +31,25 @@ def client() -> TestClient:
     return TestClient(create_app(settings), raise_server_exceptions=False)
 
 
+def test_plan_recommendation_kind_error_names_field_and_allowed_values() -> None:
+    response = client().post(
+        "/api/v1/commands/plan-drafts",
+        headers={**required_headers(), "Idempotency-Key": "invalid-plan-kind"},
+        json={
+            "context": {},
+            "request_digest": "0" * 64,
+            "plan": {},
+            "recommendations": [{"recommendation_kind": "workout"}],
+        },
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["field_errors"] == [{
+        "path": "recommendations[0].recommendation_kind",
+        "code": "unsupported_value",
+        "message_safe": "Use plan_structure or exercise_selection",
+    }]
+
+
 def required_headers(*, authorization: bool = True) -> dict[str, str]:
     headers = {
         "Accept": "application/json",

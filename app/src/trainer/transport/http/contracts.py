@@ -432,6 +432,12 @@ class ProgramRecommendationInput(ClosedModel):
     detailed_explanation: str | None = Field(default=None, min_length=1, max_length=8000)
 
 
+class PlanRecommendationInput(ProgramRecommendationInput):
+    recommendation_kind: Literal["plan_structure", "exercise_selection"] = Field(
+        description="Use plan_structure for the session structure or exercise_selection for an exercise choice."
+    )
+
+
 class ProgramVersionDraftInput(ClosedModel):
     version_label: str = Field(min_length=1, max_length=200)
     rationale: str = Field(min_length=1, max_length=4000)
@@ -805,7 +811,7 @@ class PlanDraftRequest(ClosedModel):
     context: RequestContext
     request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     plan: PlanTreeInput
-    recommendations: list[ProgramRecommendationInput] = Field(min_length=1, max_length=100)
+    recommendations: list[PlanRecommendationInput] = Field(min_length=1, max_length=100)
 
 
 class ActualMetricValueInput(ClosedModel):
@@ -1582,7 +1588,7 @@ class PlanLifecycleRequest(ClosedModel):
     expected_current_revision_id: UUID
     reason: str | None = Field(default=None, max_length=2000)
     replacement_plan: PlanTreeInput | None = None
-    replacement_recommendations: list[ProgramRecommendationInput] | None = Field(
+    replacement_recommendations: list[PlanRecommendationInput] | None = Field(
         default=None, min_length=1, max_length=100
     )
 

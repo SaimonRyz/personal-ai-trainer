@@ -402,6 +402,15 @@ def create_app(
                 if ": " in detail:
                     domain_path, message = detail.split(": ", 1)
                     path = domain_path
+            if (
+                validation_type == "literal_error"
+                and path.endswith("recommendation_kind")
+                and request.url.path in {
+                    "/api/v1/commands/plan-drafts",
+                    "/api/v1/commands/plan-lifecycle-drafts",
+                }
+            ):
+                message = "Use plan_structure or exercise_selection."
             field_errors.append({"path": path, "code": validation_type, "message_safe": message})
         return error_response(
             status_code=400,

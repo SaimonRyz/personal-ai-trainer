@@ -19,6 +19,7 @@ from trainer_mcp.contracts import (
     FamiliarExerciseSelection,
     GoalInput,
     PlaceInput,
+    PlanRecommendationInput,
     PlanTreeInput,
     ProfileInput,
     ProfileUpdateInput,
@@ -35,6 +36,7 @@ from trainer.transport.http.contracts import (
     OnboardingDraftRequest,
     ProfileUpdateDraftRequest,
     PlanDraftRequest,
+    PlanRecommendationInput as ApiPlanRecommendationInput,
     ProgramDraftRequest,
     ProgramPublicationDraftRequest,
 )
@@ -373,6 +375,21 @@ def _recommendation() -> dict[str, Any]:
         "short_explanation": "No verified scientific conclusion is linked.",
         "detailed_explanation": None,
     }
+
+
+def test_plan_recommendation_kind_is_discoverable_and_rejects_unknown_values() -> None:
+    tool = next(t for t in asyncio.run(server.mcp.list_tools()) if t.name == "create_plan_draft")
+    schema = tool.inputSchema
+    recommendation_ref = schema["properties"]["recommendations"]["items"]["$ref"]
+    recommendation_schema = schema["$defs"][recommendation_ref.rsplit("/", 1)[-1]]
+    kind_schema = recommendation_schema["properties"]["recommendation_kind"]
+    assert set(kind_schema["enum"]) == {"plan_structure", "exercise_selection"}
+
+    for model in (PlanRecommendationInput, ApiPlanRecommendationInput):
+        for kind in ("plan_structure", "exercise_selection"):
+            assert model.model_validate({**_recommendation(), "recommendation_kind": kind})
+        with pytest.raises(ValidationError, match="recommendation_kind"):
+            model.model_validate({**_recommendation(), "recommendation_kind": "workout"})
 
 
 def _assert_request_digest_and_validate(body: dict[str, Any], model: Any) -> None:

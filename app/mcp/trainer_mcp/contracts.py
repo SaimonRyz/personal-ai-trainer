@@ -339,6 +339,12 @@ class ProgramRecommendationInput(ClosedModel):
     detailed_explanation: str | None = Field(default=None, min_length=1, max_length=8000)
 
 
+class PlanRecommendationInput(ProgramRecommendationInput):
+    recommendation_kind: Literal["plan_structure", "exercise_selection"] = Field(
+        description="Use plan_structure for the session structure or exercise_selection for an exercise choice."
+    )
+
+
 class ProgramVersionDraftInput(ClosedModel):
     version_label: str = Field(min_length=1, max_length=200)
     rationale: str = Field(min_length=1, max_length=4000)

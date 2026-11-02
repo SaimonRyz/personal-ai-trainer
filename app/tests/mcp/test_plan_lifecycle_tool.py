@@ -133,6 +133,22 @@ def test_reschedule_requires_both_replacement_parts(field: str) -> None:
         PlanLifecycleInput.model_validate(value)
 
 
+def test_reschedule_recommendation_kind_matches_api() -> None:
+    value = payload("reschedule")
+    value["replacement_recommendations"][0]["recommendation_kind"] = "arbitrary_kind"
+    with pytest.raises(ValidationError):
+        PlanLifecycleInput.model_validate(value)
+    with pytest.raises(ValidationError):
+        PlanLifecycleRequest.model_validate({
+            "context": {
+                "conversation_id": "synthetic", "message_id": "reschedule",
+                "effective_at": "2026-11-02T00:00:00Z", "timezone": "UTC", "locale": None,
+            },
+            "request_digest": "0" * 64,
+            **value,
+        })
+
+
 @pytest.mark.parametrize("intent", ["cancel", "miss"])
 def test_other_transitions_reject_replacement(intent: str) -> None:
     value = payload("reschedule")
