@@ -291,6 +291,8 @@ def _set_description(planned_set: dict[str, Any], *, paired_sides: bool = False)
         parts.append("на каждую сторону")
     elif side in {"left", "right"}:
         parts.append({"left": "левая сторона", "right": "правая сторона"}[side])
+    elif side == "both":
+        parts.append("обе стороны; распределение результата по сторонам не задано")
     for scale in (
         _range("RPE", planned_set, "target_rpe_min", "target_rpe_max"),
         _range("повторений в запасе", planned_set, "target_rir_min", "target_rir_max"),

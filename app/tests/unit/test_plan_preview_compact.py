@@ -281,6 +281,7 @@ def test_band_selected_item_and_optional_set_parameters_remain_visible() -> None
     ):
         assert expected in text
     assert "на каждую сторону" not in text
+    assert "распределение результата по сторонам не задано" in text
 
 
 def test_ambiguous_load_and_unreadable_custom_definition_block_preview() -> None:
