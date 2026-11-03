@@ -222,6 +222,38 @@ def run() -> None:
                 f"load-preview-{index}-{level}",
             )["data"]
             assert expected in result["canonical_text"]
+    for field in ("assumptions", "alternatives"):
+        for index, (key, value, expected) in enumerate((
+            ("rest_seconds", 90, "отдых: 90 с"),
+            ("duration_minutes", 90, "длительность: 90 мин"),
+            ("spotter_available", True, "страхующий доступен: да"),
+        ), 1):
+            candidate = deepcopy(plan)
+            candidate["context"] = context(f"recommendation-value-{field}-{index}")
+            candidate["recommendations"][0][field][key] = value
+            value_draft = post(
+                "/api/v1/commands/plan-drafts", candidate,
+                f"recommendation-value-{field}-{index}",
+            )["data"]
+            value_preview = post(
+                "/api/v1/commands/previews",
+                {"context": context(f"recommendation-preview-{field}-{index}"),
+                 "revision_id": value_draft["revision_id"], "detail_level": "full"},
+                f"recommendation-preview-{field}-{index}",
+            )["data"]
+            assert expected in value_preview["canonical_text"]
+        invalid = deepcopy(plan)
+        invalid["context"] = context(f"recommendation-invalid-{field}")
+        invalid["recommendations"][0][field]["unrecognized_parameter"] = True
+        status, response = post_with_status(
+            "/api/v1/commands/plan-drafts", invalid,
+            f"recommendation-invalid-{field}",
+        )
+        assert status == 400, response
+        assert any(
+            error["path"] == f"recommendations[0].{field}.unrecognized_parameter"
+            for error in response["error"]["field_errors"]
+        )
     draft = post("/api/v1/commands/plan-drafts", plan, "compact-plan-draft")["data"]
     full = post(
         "/api/v1/commands/previews",

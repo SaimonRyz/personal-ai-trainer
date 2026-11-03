@@ -4813,9 +4813,13 @@ class ContextRepository:
         else:
             is_complete = detail_level == "full" and not gaps
         if row["intent_type"] == "plan":
-            from trainer.domain.plan import plan_round_issues
+            from trainer.domain.plan import plan_round_issues, recommendation_value_issues
 
             is_complete = is_complete and not plan_round_issues(canonical_payload["plan"])
+            is_complete = is_complete and not any(
+                recommendation_value_issues(item, index)
+                for index, item in enumerate(canonical_payload.get("recommendations", []))
+            )
         preview_digest = digest_payload(
             {
                 "revision_id": str(row["draft_revision_id"]),

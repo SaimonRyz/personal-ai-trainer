@@ -6,6 +6,12 @@ from uuid import UUID
 
 from trainer.domain.context import DomainValidationError
 
+RECOMMENDATION_VALUE_KEYS = frozenset({
+    "boxing", "fatigue", "program_design", "gap", "limitation", "load",
+    "synthetic", "synthetic_gate", "assumption", "description",
+    "rest_seconds", "duration_minutes", "spotter_available",
+})
+
 
 def validate_plan_draft(payload: dict[str, Any]) -> None:
     """Validate a canonical plan payload before it can become a technical draft."""
@@ -44,8 +50,43 @@ def validate_plan_draft(payload: dict[str, Any]) -> None:
     recommendations = payload.get("recommendations")
     if not isinstance(recommendations, list):
         raise DomainValidationError("recommendations must be a list")
-    for recommendation in recommendations:
+    for index, recommendation in enumerate(recommendations):
         _validate_recommendation(recommendation)
+        issues = recommendation_value_issues(recommendation, index)
+        if issues:
+            raise DomainValidationError(
+                "recommendation values require readable descriptions",
+                field_errors=issues,
+            )
+
+
+def recommendation_value_issues(
+    recommendation: dict[str, Any], index: int
+) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+    for field in ("assumptions", "alternatives"):
+        value = recommendation.get(field) or {}
+        for key, item in value.items():
+            path = f"recommendations[{index}].{field}.{key}"
+            valid = key in RECOMMENDATION_VALUE_KEYS
+            if key == "description":
+                valid = isinstance(item, str) and bool(item.strip())
+            elif key in {"rest_seconds", "duration_minutes"}:
+                valid = isinstance(item, (int, float)) and not isinstance(item, bool)
+            elif key == "spotter_available":
+                valid = isinstance(item, bool)
+            elif valid:
+                valid = isinstance(item, (str, bool))
+            if not valid:
+                issues.append({
+                    "path": path,
+                    "code": "unreadable_recommendation_value",
+                    "message_safe": (
+                        "Используйте поддерживаемый ключ с подходящим типом "
+                        "или поле description с понятным текстом."
+                    ),
+                })
+    return issues
 
 
 def plan_round_issues(plan: dict[str, Any]) -> list[dict[str, str]]:

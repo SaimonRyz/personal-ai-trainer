@@ -100,6 +100,28 @@ def test_superset_rejects_missing_or_empty_round_with_field_path(
         assert any(item["code"] == "invalid_round_no" for item in errors)
 
 
+@pytest.mark.parametrize("field", ["assumptions", "alternatives"])
+@pytest.mark.parametrize("value", [90, True])
+def test_new_recommendation_requires_meaning_for_unknown_values(field: str, value: object) -> None:
+    payload = valid_payload()
+    recommendation = {
+        "recommendation_kind": "plan_structure", "decision_text": "Synthetic decision",
+        "confidence": "moderate", "revisit_condition": "later",
+        "short_explanation": "Synthetic explanation", "fact_links": [],
+        "calculation_links": [], "conclusion_links": [],
+        "assumptions": {}, "alternatives": {},
+    }
+    recommendation[field] = {"unrecognized_parameter": value}
+    payload["recommendations"] = [recommendation]
+    with pytest.raises(DomainValidationError) as caught:
+        validate_plan_draft(payload)
+    assert caught.value.field_errors[0]["path"] == (
+        f"recommendations[0].{field}.unrecognized_parameter"
+    )
+    recommendation[field] = {"description": "Понятное описание условия"}
+    validate_plan_draft(payload)
+
+
 @pytest.mark.parametrize("field", ["program_id", "program_version_id"])
 def test_program_references_must_be_complete_pairs(field: str) -> None:
     payload = valid_payload()

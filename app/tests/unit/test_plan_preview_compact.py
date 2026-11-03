@@ -163,6 +163,47 @@ def test_legacy_program_design_recommendation_remains_readable() -> None:
     assert "program_design" not in text
 
 
+@pytest.mark.parametrize("field", ["assumptions", "alternatives"])
+def test_recommendation_values_keep_units_and_boolean_meaning(field: str) -> None:
+    item, names = exercise(1, "Вымышленное упражнение", [planned_set(1)])
+    base = {
+        "plan": {"name": "Вымышленный план", "planned_date": "2030-01-02",
+                 "temporary_conditions": {}, "blocks": [{"position": 1,
+                 "block_type_code": "straight", "exercises": [item]}]},
+        "recommendations": [{"recommendation_kind": "plan_structure",
+                             "decision_text": "Вымышленное решение",
+                             "short_explanation": "Основание",
+                             "confidence": "moderate", "revisit_condition": "позже",
+                             "assumptions": {}, "alternatives": {}}],
+    }
+    outputs = []
+    for values in ({"rest_seconds": 90}, {"duration_minutes": 90},
+                   {"spotter_available": True}):
+        candidate = deepcopy(base)
+        candidate["recommendations"][0][field] = values
+        outputs.append(render_plan(candidate, names))
+    assert "отдых: 90 с" in outputs[0]
+    assert "длительность: 90 мин" in outputs[1]
+    assert "страхующий доступен: да" in outputs[2]
+    assert len(set(outputs)) == 3
+
+
+@pytest.mark.parametrize("field", ["assumptions", "alternatives"])
+def test_legacy_unreadable_recommendation_key_is_visible_but_not_confirmable(field: str) -> None:
+    item, names = exercise(1, "Вымышленное упражнение", [planned_set(1)])
+    recommendation = {"recommendation_kind": "plan_structure",
+                      "decision_text": "Вымышленное решение", "short_explanation": "Основание",
+                      "confidence": "moderate", "revisit_condition": "позже",
+                      "assumptions": {}, "alternatives": {}}
+    recommendation[field] = {"unrecognized_parameter": True}
+    text = render_plan({"plan": {"name": "Вымышленный план",
+                  "planned_date": "2030-01-02", "temporary_conditions": {},
+                  "blocks": [{"position": 1, "block_type_code": "straight", "exercises": [item]}]},
+                  "recommendations": [recommendation]}, names)
+    assert "неясный параметр «unrecognized_parameter»: да" in text
+    assert "подтвердить этот черновик нельзя" in text
+
+
 def test_six_exercises_with_repeated_sets_fit_compact_overview() -> None:
     exercises = []
     names = {}

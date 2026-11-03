@@ -6,7 +6,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from trainer.domain.plan import plan_round_issues
+from trainer.domain.plan import plan_round_issues, recommendation_value_issues
 
 
 def _number(value: Any) -> str:
@@ -208,7 +208,7 @@ def _conditions(plan: dict[str, Any], place_name: str | None) -> list[str]:
 
 
 def _human_values(value: Any) -> list[str]:
-    """Show free-form recommendation content without exposing its internal keys."""
+    """Retain the meaning of every recommendation value, including legacy keys."""
     if isinstance(value, dict):
         labels = {
             "boxing": "бокс",
@@ -220,14 +220,27 @@ def _human_values(value: Any) -> list[str]:
             "synthetic": "вымышленный пример",
             "synthetic_gate": "вымышленный пример",
             "assumption": "допущение",
+            "rest_seconds": "отдых",
+            "duration_minutes": "длительность",
+            "spotter_available": "страхующий доступен",
         }
         result = []
         for key, item in value.items():
-            if isinstance(item, bool) and key not in labels:
-                raise ValueError("recommendation boolean assumption needs a readable label")
+            if key == "description" and isinstance(item, str):
+                result.append(item)
+                continue
+            if key == "rest_seconds" and isinstance(item, (int, float)) and not isinstance(item, bool):
+                result.append(f"отдых: {_number(item)} с")
+                continue
+            if key == "duration_minutes" and isinstance(item, (int, float)) and not isinstance(item, bool):
+                result.append(f"длительность: {_number(item)} мин")
+                continue
+            if key == "spotter_available" and isinstance(item, bool):
+                result.append(f"страхующий доступен: {'да' if item else 'нет'}")
+                continue
+            label = labels.get(key)
             for part in _human_values(item):
-                label = labels.get(key)
-                result.append(f"{label}: {part}" if label else part)
+                result.append(f"{label}: {part}" if label else f"неясный параметр «{key}»: {part}")
         return result
     if isinstance(value, list):
         return [part for item in value for part in _human_values(item)]
@@ -372,6 +385,11 @@ def render_plan(
 ) -> str:
     plan = payload["plan"]
     round_issues = plan_round_issues(plan)
+    value_issues = [
+        issue
+        for index, recommendation in enumerate(payload.get("recommendations", []))
+        for issue in recommendation_value_issues(recommendation, index)
+    ]
     lines = [
         f"Сохранить план «{plan['name']}» на {date.fromisoformat(str(plan['planned_date'])).strftime('%d.%m.%Y')}?",
         "Не сохранён. Это план занятия, а не отчёт о выполнении.",
@@ -379,6 +397,9 @@ def render_plan(
     if round_issues:
         lines.append("Требует исправления до подтверждения:")
         lines.extend(f"• {issue['message_safe']}" for issue in round_issues)
+    if value_issues:
+        lines.append("Допущения или альтернативы требуют понятного описания до подтверждения:")
+        lines.extend(f"• {issue['path']}: {issue['message_safe']}" for issue in value_issues)
     if plan.get("planned_time"):
         lines.append(f"Плановое время: {str(plan['planned_time'])[:5]}.")
     if plan.get("purpose"):
@@ -455,8 +476,8 @@ def render_plan(
         for link in recommendation.get("fact_links", []):
             lines.append(f"  Учитываемый факт: {link['reason']}")
     if detail_level in {"full", "short"}:
-        if round_issues:
-            lines.extend(["", "Исправь круги и запроси новый предпросмотр; подтвердить этот черновик нельзя."])
+        if round_issues or value_issues:
+            lines.extend(["", "Исправь указанные данные и запроси новый предпросмотр; подтвердить этот черновик нельзя."])
             return "\n".join(lines)
         lines.extend(
             ["", "Сохранить план? Можно подтвердить, назвать изменения или попросить подробности."]
