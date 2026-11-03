@@ -382,12 +382,22 @@ def _exercise_sets(exercise: dict[str, Any], *, round_block: bool) -> list[str]:
     return lines
 
 
+def plan_confirmation_action(payload: dict[str, Any]) -> str:
+    if plan_round_issues(payload["plan"]) or any(
+        recommendation_value_issues(item, index)
+        for index, item in enumerate(payload.get("recommendations", []))
+    ):
+        return "Исправь указанные данные и запроси новый предпросмотр; подтвердить этот черновик нельзя."
+    return "Сохранить план? Можно подтвердить, назвать изменения или попросить подробности."
+
+
 def render_plan(
     payload: dict[str, Any],
     exercise_names: dict[str, str],
     *,
     place_name: str | None = None,
     detail_level: str = "full",
+    include_action: bool = True,
 ) -> str:
     plan = payload["plan"]
     round_issues = plan_round_issues(plan)
@@ -482,12 +492,8 @@ def render_plan(
         for link in recommendation.get("fact_links", []):
             lines.append(f"  Учитываемый факт: {link['reason']}")
     if detail_level in {"full", "short"}:
-        if round_issues or value_issues:
-            lines.extend(["", "Исправь указанные данные и запроси новый предпросмотр; подтвердить этот черновик нельзя."])
-            return "\n".join(lines)
-        lines.extend(
-            ["", "Сохранить план? Можно подтвердить, назвать изменения или попросить подробности."]
-        )
+        if include_action:
+            lines.extend(["", plan_confirmation_action(payload)])
         return "\n".join(lines)
 
     if detail_level != "details":

@@ -9535,7 +9535,7 @@ class ContextRepository:
             ) from error
 
     def _render_plan_preview(self, payload: dict[str, Any], *, detail_level: str = "full") -> str:
-        from trainer.infrastructure.db.plan_preview import render_plan
+        from trainer.infrastructure.db.plan_preview import plan_confirmation_action, render_plan
 
         place_name = None
         place = payload["plan"].get("temporary_conditions", {}).get("place")
@@ -9571,7 +9571,10 @@ class ContextRepository:
                     raise ContextRepositoryError("incomplete_preview", "exact planned exercise name is unavailable", 409)
                 names[revision] = name
         try:
-            rendered = render_plan(payload, names, place_name=place_name, detail_level=detail_level)
+            rendered = render_plan(
+                payload, names, place_name=place_name, detail_level=detail_level,
+                include_action=False,
+            )
             basis_lines = []
             for index, recommendation in enumerate(payload.get("recommendations", []), 1):
                 for link in recommendation.get("conclusion_links", []):
@@ -9597,11 +9600,11 @@ class ContextRepository:
                         WHERE conclusion_version_id=:revision ORDER BY description
                     """), {"revision": revision}).scalars():
                         basis_lines.append(f"  Ограничение: {caveat}")
-            if basis_lines and detail_level == "full":
-                action = "Сохранить план? Можно подтвердить, назвать изменения или попросить подробности."
-                rendered = rendered.removesuffix("\n\n" + action)
-                return rendered + "\n" + "\n".join(basis_lines) + "\n\n" + action
-            return rendered + ("\n" + "\n".join(basis_lines) if basis_lines else "")
+            if basis_lines:
+                rendered += "\n" + "\n".join(basis_lines)
+            if detail_level in {"full", "short"}:
+                rendered += "\n\n" + plan_confirmation_action(payload)
+            return rendered
         except (KeyError, TypeError, ValueError) as error:
             raise ContextRepositoryError("incomplete_preview", "planned workout cannot be rendered unambiguously", 409) from error
 

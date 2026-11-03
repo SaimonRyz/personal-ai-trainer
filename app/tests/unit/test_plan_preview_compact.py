@@ -505,6 +505,65 @@ def test_legacy_large_round_preview_is_marked_incomplete() -> None:
     assert "максимум 100 кругов" in result["canonical_text"]
 
 
+def test_incomplete_plan_with_scientific_conclusion_has_no_confirm_invitation() -> None:
+    revision, exercise_id, exercise_revision, conclusion_id = (uuid4() for _ in range(4))
+    planned_exercise, _ = exercise(1, "Вымышленное упражнение", [
+        planned_set(1, round_no=1)
+    ])
+    planned_exercise["exercise_ref"] = {
+        "object_id": str(exercise_id), "revision_id": str(exercise_revision)
+    }
+    planned_exercise["exercise_id"] = str(exercise_id)
+    payload = {
+        "plan": {"name": "Вымышленный план", "planned_date": "2030-01-02",
+                 "temporary_conditions": {}, "blocks": [{"position": 1,
+                 "block_type_code": "superset", "declared_rounds": 2,
+                 "exercises": [planned_exercise]}]},
+        "recommendations": [{"recommendation_kind": "plan_structure",
+                             "decision_text": "Вымышленное решение",
+                             "short_explanation": "Основание",
+                             "confidence": "moderate", "revisit_condition": "позже",
+                             "assumptions": {}, "alternatives": {}, "fact_links": [],
+                             "conclusion_links": [{"conclusion_version_id": str(conclusion_id),
+                                                   "role": "supports"}]}],
+        "change_plan": [], "gaps": [],
+    }
+    draft_row = {"draft_revision_id": revision, "typed_payload": payload,
+                 "confirmation_kind": "normal", "intent_type": "plan", "state": "open",
+                 "expires_at": datetime.now(UTC) + timedelta(hours=1)}
+
+    def execute(statement: object, _params: object = None) -> Mock:
+        query = str(statement)
+        result = Mock()
+        if "FROM trainer.draft_revisions dr" in query:
+            result.mappings.return_value.one_or_none.return_value = draft_row
+        elif "FROM trainer.draft_dependencies" in query:
+            result.mappings.return_value = []
+        elif "SELECT canonical_name FROM trainer.exercise_revisions" in query:
+            result.scalar_one_or_none.return_value = "Вымышленное упражнение"
+        elif "SELECT statement FROM trainer.conclusion_versions" in query:
+            result.scalar_one_or_none.return_value = "Вымышленный научный вывод"
+        elif "SELECT description FROM trainer.knowledge_caveats" in query:
+            result.scalars.return_value = []
+        return result
+
+    session = Mock()
+    session.execute.side_effect = execute
+    repo = ContextRepository(session)
+    repo._reserve = Mock(return_value=(uuid4(), None))
+    repo._finish = Mock()
+    repo._audit = Mock()
+    result = repo.create_preview(
+        payload={"request_digest": "a" * 64, "revision_id": str(revision),
+                 "detail_level": "full", "context": {"conversation_id": "synthetic"}},
+        key="incomplete-scientific-plan", correlation_id=uuid4(),
+    )
+    assert result["complete"] is False
+    assert "Вымышленный научный вывод" in result["canonical_text"]
+    assert result["canonical_text"].endswith("подтвердить этот черновик нельзя.")
+    assert "Сохранить план?" not in result["canonical_text"]
+
+
 def test_changed_plan_renderer_makes_old_full_preview_stale() -> None:
     row = {
         "detail_level": "full",
