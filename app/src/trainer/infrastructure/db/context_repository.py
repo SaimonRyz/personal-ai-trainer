@@ -4719,8 +4719,10 @@ class ContextRepository:
         # Only the full, confirmation-bound view may authorize a shown/confirm
         # transition. Section details stay tied to this draft revision.
         detail_level = payload.get("detail_level", "full")
-        if detail_level in {"inventory", "details"} and row["intent_type"] != "onboarding":
-            raise ContextRepositoryError("validation_error", "section details are available only for onboarding", 422)
+        if detail_level == "inventory" and row["intent_type"] != "onboarding":
+            raise ContextRepositoryError("validation_error", "inventory details are available only for onboarding", 422)
+        if detail_level == "details" and row["intent_type"] not in {"onboarding", "plan"}:
+            raise ContextRepositoryError("validation_error", "details are unavailable for this draft", 422)
         if detail_level in {"exercise", "groups"} and row["intent_type"] != "familiar_exercise_batch":
             raise ContextRepositoryError("validation_error", "exercise details are available only for familiar batches", 422)
         if detail_level == "workout" and row["intent_type"] != "workout_import_batch":
@@ -4789,7 +4791,7 @@ class ContextRepository:
         elif row["intent_type"] == "program":
             canonical_text = self._render_program_publication_preview(canonical_payload, draft_only=True)
         elif row["intent_type"] == "plan":
-            canonical_text = self._render_plan_preview(canonical_payload)
+            canonical_text = self._render_plan_preview(canonical_payload, detail_level=detail_level)
         elif row["intent_type"] == "plan_lifecycle":
             canonical_text = self._render_plan_lifecycle_preview(canonical_payload)
         elif row["intent_type"] == "goal":
@@ -9524,7 +9526,7 @@ class ContextRepository:
                 field_errors=[{"path": error.path, "code": "schedule_conflict", "message_safe": str(error)}],
             ) from error
 
-    def _render_plan_preview(self, payload: dict[str, Any]) -> str:
+    def _render_plan_preview(self, payload: dict[str, Any], *, detail_level: str = "full") -> str:
         from trainer.infrastructure.db.plan_preview import render_plan
 
         place_name = None
@@ -9561,7 +9563,7 @@ class ContextRepository:
                     raise ContextRepositoryError("incomplete_preview", "exact planned exercise name is unavailable", 409)
                 names[revision] = name
         try:
-            rendered = render_plan(payload, names, place_name=place_name)
+            rendered = render_plan(payload, names, place_name=place_name, detail_level=detail_level)
             basis_lines = []
             for index, recommendation in enumerate(payload.get("recommendations", []), 1):
                 for link in recommendation.get("conclusion_links", []):
@@ -9575,17 +9577,22 @@ class ContextRepository:
                     role = {"supports": "поддерживает", "contradicts": "противоречит",
                             "contextualizes": "даёт контекст"}.get(link["role"], link["role"])
                     basis_lines.append(f"Научный вывод для рекомендации {index} ({role}): {statement}")
-                    for title in self.session.execute(text("""
-                        SELECT s.title FROM trainer.conclusion_source_links l
-                        JOIN trainer.scientific_sources s ON s.source_id=l.source_id
-                        WHERE l.conclusion_version_id=:revision ORDER BY s.title
-                    """), {"revision": revision}).scalars():
-                        basis_lines.append(f"  Источник: {title}")
+                    if detail_level == "details":
+                        for title in self.session.execute(text("""
+                            SELECT s.title FROM trainer.conclusion_source_links l
+                            JOIN trainer.scientific_sources s ON s.source_id=l.source_id
+                            WHERE l.conclusion_version_id=:revision ORDER BY s.title
+                        """), {"revision": revision}).scalars():
+                            basis_lines.append(f"  Источник: {title}")
                     for caveat in self.session.execute(text("""
                         SELECT description FROM trainer.knowledge_caveats
                         WHERE conclusion_version_id=:revision ORDER BY description
                     """), {"revision": revision}).scalars():
                         basis_lines.append(f"  Ограничение: {caveat}")
+            if basis_lines and detail_level == "full":
+                action = "Сохранить план? Можно подтвердить, назвать изменения или попросить подробности."
+                rendered = rendered.removesuffix("\n\n" + action)
+                return rendered + "\n" + "\n".join(basis_lines) + "\n\n" + action
             return rendered + ("\n" + "\n".join(basis_lines) if basis_lines else "")
         except (KeyError, TypeError, ValueError) as error:
             raise ContextRepositoryError("incomplete_preview", "planned workout cannot be rendered unambiguously", 409) from error

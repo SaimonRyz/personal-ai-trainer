@@ -15,8 +15,8 @@
       "sha256": "8c376cd4499d6b1311e15e23e502645e706219b205d2c86bba6b160c08192af3"
     },
     "DEVELOPMENT.md": {
-      "size": 5140,
-      "sha256": "b1b889d1246e9779950e70e8684593cad2a4a1689b46f8258dcc23653dd73aa3"
+      "size": 5718,
+      "sha256": "ed4a43dcbc57939b40967a8a43ea2ceaee1550adb72c6c3d647280ce2421d13b"
     },
     "FAMILIAR_EXERCISE_BATCH.md": {
       "size": 7860,
@@ -57,6 +57,10 @@
     "app/AGENTS.md": {
       "size": 2260,
       "sha256": "cd87fcff693c4cb9b0b76a5a2adf2b4ab8baaf01d36b9c85c9910eab8d48e3c1"
+    },
+    "app/PLAN_PREVIEW_CONTRACT.md": {
+      "size": 5265,
+      "sha256": "375981cc0a31ea16bd384d0ba71f976e74b74dbc788890fcd273e1ef7f789832"
     },
     "app/README.md": {
       "size": 1571,
@@ -443,8 +447,8 @@
       "sha256": "95572fe20885e5be12f1d11baff8b681ccf65e991ef24744f3d96729c7a3234c"
     },
     "app/src/trainer/infrastructure/db/context_repository.py": {
-      "size": 498892,
-      "sha256": "070d8731046c70b348775e0960a447063758b35c55b582ca7283c09ba73f6d6a"
+      "size": 499617,
+      "sha256": "030909d59c0e0dff695f5d9527f7182dadd79ac101ff501281ebcb9de05f8f88"
     },
     "app/src/trainer/infrastructure/db/engine.py": {
       "size": 532,
@@ -479,8 +483,8 @@
       "sha256": "e922cd9a01e67b501a85809e6a1c4482760198fa4d91bef910fa7ee67a94ff15"
     },
     "app/src/trainer/infrastructure/db/plan_preview.py": {
-      "size": 14327,
-      "sha256": "1b016f0fe3581bd7f12c6e87e49119b2b0947e32630c32c9b85960fc5f6122f6"
+      "size": 24976,
+      "sha256": "073a2b12e235bd1864684a7ecdba07bae123f8f388e20c6f1baab325865b80cf"
     },
     "app/src/trainer/infrastructure/db/preview_numbers.py": {
       "size": 507,
@@ -782,6 +786,10 @@
       "size": 61430,
       "sha256": "1707570a166dceb3e3a551542e9a1baf7ccfd29a075a51441f14abbe269f18ab"
     },
+    "app/tests/integration/plan_preview_flow.py": {
+      "size": 7476,
+      "sha256": "1f9680f881a5cc634cd8234f2c79b1429bd53c0f07b6f62f325b7218157d703b"
+    },
     "app/tests/integration/profile_update_flow.py": {
       "size": 4585,
       "sha256": "f283c6ce8c50068930ea422af1d042eec836fbd0a4f003221900a37462490b92"
@@ -975,8 +983,8 @@
       "sha256": "9feed47c7d9933a86f4a3716618ef6e664f51e02ca95680ce7d8434c8747e62f"
     },
     "app/tests/unit/test_confirmation_preview_audit.py": {
-      "size": 19931,
-      "sha256": "f7e8786d656bf88049576e005000b87d5f1a0a7a67cd2da2f867a362c37f8ebc"
+      "size": 19923,
+      "sha256": "cc5469f9b515eb4a569c4940890e9d9792bd7f0b8e63cad5238e7a27f9bc48af"
     },
     "app/tests/unit/test_context_domain.py": {
       "size": 6704,
@@ -1050,13 +1058,17 @@
       "size": 6152,
       "sha256": "76220ed8a230f3ca3996fdda71fbf5cd93c4fb96f7a5e81af1e1c9d404b236e5"
     },
+    "app/tests/unit/test_plan_preview_compact.py": {
+      "size": 15258,
+      "sha256": "cdd886b1802bc2ae236d8b88d54d8df56555812eb58a59c66af2e86e67ea0f68"
+    },
     "app/tests/unit/test_planning_fact_digest.py": {
       "size": 1848,
       "sha256": "8a72c302ff5ea11b2e03a82b72a33f8870a464c565949f3347179ca3dcb20ba3"
     },
     "app/tests/unit/test_preview_human_readable.py": {
-      "size": 41056,
-      "sha256": "6f4c66c79810b307ef0961a97ce09dd188ed4bad3420d64535597ab5080986cc"
+      "size": 41058,
+      "sha256": "88979ce16ad963001bdc163d4cc8e0b2a70c3d37ef763968d78ba82266080a24"
     },
     "app/tests/unit/test_preview_report_codes.py": {
       "size": 6870,
@@ -1107,8 +1119,8 @@
       "sha256": "ff5ae40bbdf6c7f571336c61aa70114255c8860ac689e9632d18494a763ea36b"
     },
     "trainer-workspace/.codex/skills/personal-trainer/SKILL.md": {
-      "size": 37222,
-      "sha256": "37e2f8a9c29616990ba080ded015c858467cc72928a707554220bc03616d0b99"
+      "size": 38638,
+      "sha256": "b24f30f38cfa14f598832dcb17650aa4d2bb4fe085b5f4870202692f92b5cba3"
     },
     "trainer-workspace/AGENTS.md": {
       "size": 3450,

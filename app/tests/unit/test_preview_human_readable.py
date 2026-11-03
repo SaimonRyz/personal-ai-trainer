@@ -88,7 +88,7 @@ def test_plan_preview_shows_asymmetric_round_participation() -> None:
                              exercise(2, second, range(1, 3))]}]},
                "recommendations": []}
     text = render_plan(payload, {first: "Подтягивания", second: "Приседания"})
-    assert "Круги 1–2: Подтягивания + Приседания" in text
+    assert "Круги 1–2: Подтягивания → Приседания" in text
     assert "Круги 3–4: Подтягивания" in text
     assert "2. Приседания." in text
     assert "подходы 1–4" in text

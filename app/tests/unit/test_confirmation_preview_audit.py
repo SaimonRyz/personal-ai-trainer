@@ -201,7 +201,7 @@ class ConfirmationPreviewAudit(unittest.TestCase):
                           "revisit_condition": "после уточнения", "assumptions": {"gap": "нет данных"},
                           "alternatives": {}, "fact_links": [], "calculation_links": [], "conclusion_links": []}
         text = render_plan({"plan": plan, "recommendations": [recommendation]}, {})
-        self.assertIn("Нет достаточной применимой проверенной научной опоры", text)
+        self.assertIn("Научной опоры для этой рекомендации недостаточно", text)
         self.assertIn("нет данных", text)
 
     def test_twenty_workout_import_entries_all_visible(self) -> None:
