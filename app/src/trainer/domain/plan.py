@@ -6,6 +6,14 @@ from uuid import UUID
 
 from trainer.domain.context import DomainValidationError
 
+RECOMMENDATION_VALUE_KEYS = frozenset({
+    "boxing", "fatigue", "program_design", "gap", "limitation", "load",
+    "synthetic", "synthetic_gate", "assumption", "description",
+    "rest_seconds", "duration_minutes", "spotter_available",
+})
+MAX_PLAN_ROUNDS = 100
+MAX_ROUND_ISSUES = 20
+
 
 def validate_plan_draft(payload: dict[str, Any]) -> None:
     """Validate a canonical plan payload before it can become a technical draft."""
@@ -22,6 +30,12 @@ def validate_plan_draft(payload: dict[str, Any]) -> None:
     if not isinstance(blocks, list) or not blocks:
         raise DomainValidationError("plan requires at least one block")
     _validate_positions(blocks, "blocks")
+    round_issues = plan_round_issues(plan)
+    if round_issues:
+        raise DomainValidationError(
+            "round assignment requires correction",
+            field_errors=round_issues,
+        )
     for block in blocks:
         exercises = block.get("exercises")
         if not isinstance(exercises, list) or not exercises:
@@ -38,8 +52,122 @@ def validate_plan_draft(payload: dict[str, Any]) -> None:
     recommendations = payload.get("recommendations")
     if not isinstance(recommendations, list):
         raise DomainValidationError("recommendations must be a list")
-    for recommendation in recommendations:
+    for index, recommendation in enumerate(recommendations):
         _validate_recommendation(recommendation)
+        issues = recommendation_value_issues(recommendation, index)
+        if issues:
+            raise DomainValidationError(
+                "recommendation values require readable descriptions",
+                field_errors=issues,
+            )
+
+
+def recommendation_value_issues(
+    recommendation: dict[str, Any], index: int
+) -> list[dict[str, str]]:
+    issues: list[dict[str, str]] = []
+    for field in ("assumptions", "alternatives"):
+        value = recommendation.get(field) or {}
+        for key, item in value.items():
+            path = f"recommendations[{index}].{field}.{key}"
+            valid = key in RECOMMENDATION_VALUE_KEYS
+            if key == "description":
+                valid = isinstance(item, str) and bool(item.strip())
+            elif key in {"rest_seconds", "duration_minutes"}:
+                valid = isinstance(item, (int, float)) and not isinstance(item, bool)
+            elif key == "spotter_available":
+                valid = isinstance(item, bool)
+            elif valid:
+                valid = isinstance(item, (str, bool))
+            if not valid:
+                issues.append({
+                    "path": path,
+                    "code": "unreadable_recommendation_value",
+                    "message_safe": (
+                        "Используйте поддерживаемый ключ с подходящим типом "
+                        "или поле description с понятным текстом."
+                    ),
+                })
+    return issues
+
+
+def plan_round_issues(plan: dict[str, Any]) -> list[dict[str, str]]:
+    """Find ambiguous round assignments without changing legacy draft data."""
+    issues: list[dict[str, str]] = []
+
+    def record(issue: dict[str, str]) -> bool:
+        issues.append(issue)
+        if len(issues) >= MAX_ROUND_ISSUES:
+            issues.append({
+                "path": "plan.blocks",
+                "code": "additional_round_issues",
+                "message_safe": (
+                    "Показаны первые 20 ошибок кругов; исправьте их и проверьте план снова."
+                ),
+            })
+            return True
+        return False
+
+    for block_index, block in enumerate(plan.get("blocks") or []):
+        if block.get("block_type_code") not in {"circuit", "superset"}:
+            continue
+        path = f"plan.blocks[{block_index}]"
+        rounds = block.get("declared_rounds")
+        if not isinstance(rounds, int) or rounds < 1:
+            if record({"path": f"{path}.declared_rounds", "code": "missing_round_count",
+                       "message_safe": "Укажите число кругов блока."}):
+                return issues
+            continue
+        if rounds > MAX_PLAN_ROUNDS:
+            if record({
+                "path": f"{path}.declared_rounds",
+                "code": "too_many_rounds",
+                "message_safe": (
+                    f"Блок {block_index + 1}: максимум {MAX_PLAN_ROUNDS} кругов; "
+                    f"задано {rounds}."
+                ),
+            }):
+                return issues
+            continue
+        occupied: set[int] = set()
+        for exercise_index, exercise in enumerate(block.get("exercises") or []):
+            for set_index, planned_set in enumerate(exercise.get("sets") or []):
+                number = planned_set.get("round_no")
+                set_path = f"{path}.exercises[{exercise_index}].sets[{set_index}].round_no"
+                if not isinstance(number, int) or not 1 <= number <= rounds:
+                    if record({
+                        "path": set_path,
+                        "code": "invalid_round_no",
+                        "message_safe": (
+                            f"Блок {block_index + 1}, упражнение {exercise_index + 1}, "
+                            f"подход {set_index + 1}: укажите круг от 1 до {rounds}."
+                        ),
+                    }):
+                        return issues
+                else:
+                    occupied.add(number)
+        missing = [number for number in range(1, rounds + 1) if number not in occupied]
+        if missing:
+            intervals: list[tuple[int, int]] = []
+            start = previous = missing[0]
+            for number in missing[1:]:
+                if number != previous + 1:
+                    intervals.append((start, previous))
+                    start = number
+                previous = number
+            intervals.append((start, previous))
+            for start, end in intervals:
+                label = str(start) if start == end else f"{start}–{end}"
+                if record({
+                    "path": f"{path}.declared_rounds",
+                    "code": "empty_round",
+                    "message_safe": (
+                        f"Блок {block_index + 1}: в круге {label} нет подходов; "
+                        "добавьте их или уменьшите число кругов."
+                    ),
+                }):
+                    return issues
+    return issues
 
 
 def _validate_source(plan: dict[str, Any]) -> None:

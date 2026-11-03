@@ -201,7 +201,7 @@ class ConfirmationPreviewAudit(unittest.TestCase):
                           "revisit_condition": "после уточнения", "assumptions": {"gap": "нет данных"},
                           "alternatives": {}, "fact_links": [], "calculation_links": [], "conclusion_links": []}
         text = render_plan({"plan": plan, "recommendations": [recommendation]}, {})
-        self.assertIn("Нет достаточной применимой проверенной научной опоры", text)
+        self.assertIn("Научной опоры для этой рекомендации недостаточно", text)
         self.assertIn("нет данных", text)
 
     def test_twenty_workout_import_entries_all_visible(self) -> None:
@@ -235,7 +235,8 @@ class ConfirmationPreviewAudit(unittest.TestCase):
                    "context_snapshot": {"equipment_inventory_snapshot": [
                        {"name": "СЛУЖЕБНЫЙ ПРЕДМЕТ"}]}}
         text = render_plan(payload, {"synthetic-revision": "Вымышленное упражнение"})
-        self.assertEqual(text.count("Подход "), 3)
+        for position in (1, 2, 3):
+            self.assertIn(f"подход {position}:", text)
         self.assertIn("02.01.2030", text)
         self.assertNotIn("СЛУЖЕБНЫЙ ПРЕДМЕТ", text)
         self.assertNotIn("служебные ID", text)

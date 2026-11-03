@@ -59,15 +59,39 @@ def test_plan_preview_binds_exact_names_to_each_set_and_rejects_missing_name() -
     }
     names = {first: "Отжимания от пола", second: "Приседания без отягощения"}
     rendered = render_plan(payload, names)
-    first_section = rendered.split("Упражнение 1: Отжимания от пола", 1)[1].split(
-        "Упражнение 2:", 1
+    first_section = rendered.split("1. Отжимания от пола", 1)[1].split(
+        "2. Приседания", 1
     )[0]
-    second_section = rendered.split("Упражнение 2: Приседания без отягощения", 1)[1]
-    assert "точно 5 повт." in first_section and "отдых после подхода 30 с" in first_section
-    assert "точно 8 повт." in second_section and "отдых после подхода 45 с" in second_section
+    second_section = rendered.split("2. Приседания без отягощения", 1)[1]
+    assert "5 повторений" in first_section and "отдых 30 с" in first_section
+    assert "8 повторений" in second_section and "отдых 45 с" in second_section
     assert "Context snapshot" not in rendered and len(rendered) < 2_000
     with pytest.raises(ValueError, match="exact exercise name"):
         render_plan(payload, {first: names[first]})
+
+
+def test_plan_preview_shows_asymmetric_round_participation() -> None:
+    first, second = str(uuid4()), str(uuid4())
+    def exercise(position: int, revision: str, rounds: range) -> dict[str, object]:
+        return {
+            "position": position, "circuit_position": position,
+            "exercise_ref": {"revision_id": revision},
+            "sets": [{"position": number, "round_no": number, "set_type_code": "working",
+                      "side": "both", "metrics": [{"metric_kind": "repetitions",
+                      "exact_value": "4", "unit_code": "repetition"}], "loads": []}
+                     for number in rounds],
+        }
+    payload = {"plan": {"name": "Вымышленный план", "planned_date": "2030-01-02",
+               "temporary_conditions": {}, "blocks": [{"position": 1,
+               "block_type_code": "circuit", "declared_rounds": 4,
+               "exercises": [exercise(1, first, range(1, 5)),
+                             exercise(2, second, range(1, 3))]}]},
+               "recommendations": []}
+    text = render_plan(payload, {first: "Подтягивания", second: "Приседания"})
+    assert "Круги 1–2: Подтягивания → Приседания" in text
+    assert "Круги 3–4: Подтягивания" in text
+    assert "2. Приседания." in text
+    assert "подходы 1–4" in text
 
 
 @pytest.mark.parametrize(
