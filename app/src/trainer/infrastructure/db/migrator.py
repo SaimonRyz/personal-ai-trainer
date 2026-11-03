@@ -181,6 +181,16 @@ MIGRATIONS = (
         "dfe40e06835572b50328cfb33a22ae3c34c73e2f935e797f63bb75fea6ec6a8f",
         "0030_plan_recommendation_kinds.py",
     ),
+    MigrationSpec(
+        "0030_program_schedule",
+        "48cbcabac33f6c83be226ec0e5454662f3ba2054d025a5655a0fca0f6d62b1e2",
+        "0030_program_schedule.py",
+    ),
+    MigrationSpec(
+        "0031_merge_program_plan",
+        "91ff617c95213867ae9fc13bbe395e15e0f1a150482c661c2c8541fd77773d61",
+        "0031_merge_program_plan.py",
+    ),
 )
 
 
@@ -251,7 +261,12 @@ def validate_ledger(connection: psycopg.Connection[tuple[object, ...]]) -> None:
     revision_index = next(
         index for index, item in enumerate(MIGRATIONS) if item.revision == revision
     )
-    expected_rows = [(item.revision, item.checksum) for item in MIGRATIONS[: revision_index + 1]]
+    if revision in {"0030_plan_recommendation_kinds", "0030_program_schedule"}:
+        base_end = next(index for index, item in enumerate(MIGRATIONS) if item.revision == "0029_profile_update")
+        selected = [*MIGRATIONS[:base_end + 1], next(item for item in MIGRATIONS if item.revision == revision)]
+    else:
+        selected = MIGRATIONS[: revision_index + 1]
+    expected_rows = sorted((item.revision, item.checksum) for item in selected)
     if rows != expected_rows:
         raise SchemaCompatibilityError("migration ledger revision/checksum mismatch")
 
@@ -342,6 +357,9 @@ def migrate_to_head() -> None:
             validate_ledger(connection)
             validate_no_unfinished_operations(connection)
             for migration in pending_migrations(current_revision(connection)):
+                if migration.revision in {"0030_plan_recommendation_kinds", "0030_program_schedule"}:
+                    # Alembic applies the missing branch(es) while upgrading to the merge revision.
+                    continue
                 attempt_id = str(uuid4())
                 record_attempt(
                     connection,

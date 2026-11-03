@@ -28,5 +28,7 @@
   "0027_workout_import_batch.py": "0b5f60bfb678e9f6df3a7e6d5ab3f1cae622bc2a0f89eb19cf0587548d193a93",
   "0028_body_weight_goal_type.py": "b85e8fc99aec25c86b60afe38744f3c1042fbeffcc00463951ab005d43c190dd",
   "0029_profile_update.py": "1be8c213527f538c3e1b15c0ebbb38c79c7f181ed2112d73b7c5ad168f91bdc8",
-  "0030_plan_recommendation_kinds.py": "8a55d23d2549db1717a24fb627621829ca33f9ee43d2d801726f1f10e000039d"
+  "0030_plan_recommendation_kinds.py": "8a55d23d2549db1717a24fb627621829ca33f9ee43d2d801726f1f10e000039d",
+  "0030_program_schedule.py": "f76a71c2ef91ac98251636ec95e17e596f6bbf5fa6613a52842737c463887ea1",
+  "0031_merge_program_plan.py": "a48772ba9a3ea13bcbc1e7e2430221270f38784dd3e23a00c45b7e516d8e0417"
 }

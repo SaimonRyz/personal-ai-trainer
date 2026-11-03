@@ -50,7 +50,12 @@ def _load(load: dict[str, Any]) -> str:
     if load.get("item_count") is not None:
         result += f"; предметов: {_number(load['item_count'])}"
     if load.get("mass_meaning"):
-        result += f"; учёт массы: {load['mass_meaning'].replace('_', ' ')}"
+        meanings = {
+            "total_external_mass": "общая внешняя масса",
+            "per_item_mass": "масса каждого предмета",
+            "mass_per_item": "масса каждого предмета",
+        }
+        result += f"; учёт массы: {meanings.get(load['mass_meaning'], load['mass_meaning'].replace('_', ' '))}"
     if load.get("direction"):
         result += "; " + {"assistance": "помощь", "resistance": "сопротивление"}.get(
             load["direction"], load["direction"]
@@ -115,7 +120,7 @@ def render_plan(
     if plan.get("comment"):
         lines.append(f"Комментарий: {plan['comment']}")
     if plan.get("program_id"):
-        lines.append("План связан с текущей редакцией программы; служебные ID скрыты.")
+        lines.append("План составлен по действующей программе.")
     lines.extend(_conditions(plan, place_name))
 
     for block in sorted(plan["blocks"], key=lambda item: item["position"]):
@@ -180,6 +185,8 @@ def render_plan(
         confidence = {"high": "высокая", "moderate": "умеренная", "low": "низкая", "insufficient": "недостаточно данных"}
         lines.append(f"Рекомендация {index} ({kinds.get(recommendation['recommendation_kind'], recommendation['recommendation_kind'])}): {recommendation['decision_text']}")
         lines.append(f"  Уверенность: {confidence.get(recommendation['confidence'], recommendation['confidence'])}.")
+        if recommendation["confidence"] == "insufficient":
+            lines.append("  Нет достаточной применимой проверенной научной опоры; решение основано на перечисленных допущениях.")
         lines.append(f"  Объяснение: {recommendation['short_explanation']}")
         if recommendation.get("detailed_explanation"):
             lines.append(f"  Подробности: {recommendation['detailed_explanation']}")

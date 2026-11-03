@@ -12,8 +12,20 @@ from unittest.mock import patch
 import pytest
 
 from trainer.lifecycle import cli
-from trainer.lifecycle.release import PROOF, RECIPE, ReleaseWorkspaceLifecycleManager
+from trainer.lifecycle.release import PROOF, RECIPE, ReleaseWorkspaceLifecycleManager, image_source_files
 from trainer.lifecycle.system import LifecycleError, LifecycleManager
+
+
+def test_image_source_files_excludes_spike_from_build_proof() -> None:
+    files = {
+        "src/trainer/api.py": "a", "src/trainer/spike/app.py": "b",
+        "mcp/trainer_mcp/server.py": "c", "migrations/versions/example.py": "d",
+        "uv.lock": "e", "distribution-draft/build_release.py": "f",
+    }
+    assert image_source_files(files) == {
+        "src/trainer/api.py": "a", "mcp/trainer_mcp/server.py": "c",
+        "migrations/versions/example.py": "d", "uv.lock": "e",
+    }
 
 
 def test_release_postgres_requires_registry_provenance() -> None:

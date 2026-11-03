@@ -57,6 +57,16 @@ def source_files(root: Path) -> dict[str, str]:
     return result
 
 
+def image_source_files(files: dict[str, str]) -> dict[str, str]:
+    """Match the source subset admitted by .dockerignore and build_release.py."""
+    return {
+        name: value for name, value in files.items()
+        if ((name.startswith(("src/", "mcp/", "migrations/"))
+             and not name.startswith("src/trainer/spike/"))
+            or name in {"pyproject.toml", "uv.lock", "README.md", "alembic.ini"})
+    }
+
+
 class ReleaseWorkspaceLifecycleManager(AlphaWorkspaceLifecycleManager):
     """Reuse alpha ownership/network boundaries, with release-specific proof."""
 
@@ -106,9 +116,7 @@ class ReleaseWorkspaceLifecycleManager(AlphaWorkspaceLifecycleManager):
             image_id = local["TRAINER_ALPHA_API_IMAGE"]
             pins = json.loads((self.root / RECIPE).read_text(encoding="utf-8"))
             expected = source_files(self.root)
-            image_files = {name: value for name, value in expected.items()
-                           if name.startswith(("src/", "mcp/", "migrations/"))
-                           or name in {"pyproject.toml", "uv.lock", "README.md", "alembic.ini"}}
+            image_files = image_source_files(expected)
             lock = tomllib.loads((self.root / "uv.lock").read_text(encoding="utf-8"))
             allowed = {package["name"]: package["version"] for package in lock["package"]}
             constraints = self.root / "distribution-draft/build-constraints.txt"
@@ -149,11 +157,7 @@ class ReleaseWorkspaceLifecycleManager(AlphaWorkspaceLifecycleManager):
         try:
             proof = json.loads(path.read_text(encoding="utf-8"))
             source = proof["source_files"]
-            image_files = {
-                name: value for name, value in source.items()
-                if name.startswith(("src/", "mcp/", "migrations/"))
-                or name in {"pyproject.toml", "uv.lock", "README.md", "alembic.ini"}
-            }
+            image_files = image_source_files(source)
             pins = json.loads((self.root / RECIPE).read_text(encoding="utf-8"))
             inspection = proof["inspection"]
             postgres = proof["postgres"]

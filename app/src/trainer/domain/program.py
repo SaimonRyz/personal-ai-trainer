@@ -46,6 +46,23 @@ def validate_program_draft(payload: dict[str, Any]) -> None:
         ):
             raise DomainValidationError("version period must be inside program period")
     _unique_positions(version["templates"], "templates")
+    weekdays = [day.get("weekday_code") for day in version["templates"]]
+    if any(day is not None for day in weekdays) and any(day is None for day in weekdays):
+        raise DomainValidationError("assign a weekday to every template or leave all weekdays unassigned")
+    if len([day for day in weekdays if day is not None]) != len(set(day for day in weekdays if day is not None)):
+        raise DomainValidationError("program weekdays must be unique")
+    stage_bounds: list[tuple[date, date]] = []
+    positions = {day["position"] for day in version["templates"]}
+    for stage in version.get("cycle_stages", []):
+        start, end = date.fromisoformat(stage["starts_on"]), date.fromisoformat(stage["ends_on"])
+        if not (date.fromisoformat(version["period_start"]) <= start <= end <= date.fromisoformat(version["period_end"])):
+            raise DomainValidationError("cycle stage must fit inside the version period")
+        if any(start <= prior_end and prior_start <= end for prior_start, prior_end in stage_bounds):
+            raise DomainValidationError("cycle stages must not overlap")
+        stage_bounds.append((start, end))
+        rule_positions = [rule["day_position"] for rule in stage.get("day_rules", [])]
+        if len(rule_positions) != len(set(rule_positions)) or not set(rule_positions) <= positions:
+            raise DomainValidationError("cycle stage day rules must reference distinct templates")
     for day in version["templates"]:
         _unique_positions(day["blocks"], "blocks")
         for block in day["blocks"]:
