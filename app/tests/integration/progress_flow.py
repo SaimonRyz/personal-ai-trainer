@@ -75,6 +75,10 @@ def post(
             mode="json",
         )
         normalized.pop("request_digest", None)
+        if model is PreviewRequest:
+            for field in ("entry_name", "entry_key"):
+                if normalized.get(field) is None:
+                    normalized.pop(field)
         payload = {**normalized, "request_digest": digest_payload(normalized)}
     headers = {
         "Accept": "application/json",

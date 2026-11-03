@@ -32,6 +32,7 @@ def test_project_codex_config_uses_local_allowlisted_mcp_tools() -> None:
         "get_exercise_exact",
         "get_operation_status",
         "get_plan",
+        "get_program_draft_detail",
         "get_planning_context",
         "get_profile_context",
         "get_progress",

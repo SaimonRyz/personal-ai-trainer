@@ -300,7 +300,7 @@ def program_version_input(version: dict[str, Any]) -> dict[str, Any]:
                 | {"exercises": exercises}
             )
         templates.append(
-            {key: template[key] for key in ("position", "day_type_code", "purpose")}
+            {key: template[key] for key in ("position", "day_type_code", "purpose", "weekday_code")}
             | {"blocks": blocks}
         )
     recommendations = []
@@ -330,7 +330,7 @@ def program_version_input(version: dict[str, Any]) -> dict[str, Any]:
         )
     return {
         key: version[key] for key in ("version_label", "rationale", "period_start", "period_end")
-    } | {"templates": templates, "recommendations": recommendations}
+    } | {"templates": templates, "cycle_stages": version.get("cycle_stages", []), "recommendations": recommendations}
 
 
 def plan_blocks_from_program(template: dict[str, Any]) -> list[dict[str, Any]]:
@@ -1422,12 +1422,19 @@ def main() -> None:
 
     for action, offset in (("cancel", 4), ("miss", 5)):
         untouched = create_plan(action, exercise_id, exercise["unilateral"], metrics, offset)
-        before_tree = current_plan(untouched["plan_id"])["tree"]["blocks"]
+        untouched_blocks = current_plan(untouched["plan_id"])["tree"]["blocks"]
         terminal = transition(untouched, action, action + "-lifecycle")
         current = current_plan(untouched["plan_id"])
         assert current["lifecycle"] == {"cancel": "cancelled", "miss": "missed"}[action]
         assert current["plan_ref"]["revision_id"] == terminal["source_revision_id"]
-        assert logical_tree(current["tree"]["blocks"]) == logical_tree(before_tree)
+        def without_revision_ids(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: without_revision_ids(item) for key, item in value.items()
+                        if key not in {"planned_block_id", "planned_exercise_id", "planned_set_id"}}
+            if isinstance(value, list):
+                return [without_revision_ids(item) for item in value]
+            return value
+        assert without_revision_ids(current["tree"]["blocks"]) == without_revision_ids(untouched_blocks)
 
     with ENGINE.connect() as db:
         assert (

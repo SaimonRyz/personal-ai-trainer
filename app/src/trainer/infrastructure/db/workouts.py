@@ -3259,7 +3259,7 @@ class WorkoutRepository:
                         ).mappings()
                     ]
                     ex["sets"].append(aset)
-                ex["replacement_source"] = (
+                replacement_source = (
                     self.session.execute(
                         text("""
                     SELECT skipped_execution_id
@@ -3269,6 +3269,11 @@ class WorkoutRepository:
                     )
                     .mappings()
                     .one_or_none()
+                )
+                ex["replacement_source"] = (
+                    dict(replacement_source)
+                    if replacement_source and replacement_source["skipped_execution_id"] is not None
+                    else None
                 )
                 item["exercises"].append(ex)
             tree["blocks"].append(item)

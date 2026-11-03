@@ -665,18 +665,128 @@ class EvidenceRepository(ContextRepository):
         if payload.get("evidence_change") == "source_availability":
             update = payload["source_availability_update"]
             source = update["source"]
+            availability = {"available": "доступен", "unavailable": "недоступен"}
             return (
                 "Полный предпросмотр: изменение доступности научного источника.\n"
                 f"Источник: {source['title']} ({source['authors_or_org']}, {source['publication_year']}); "
-                f"URL: {source['url']}\n"
-                f"Доступность: {update['expected_availability']} → {update['new_availability']}\n"
+                f"Адрес источника: {source.get('url') or source.get('doi') or source.get('pmid') or 'не указан'}\n"
+                f"Доступность: {availability[update['expected_availability']]} → {availability[update['new_availability']]}\n"
                 "Предыдущее время проверки: "
                 f"{update['expected_last_checked_at'] or 'не было'}\n"
                 f"Новое время проверки (будет сохранено): {update['checked_at']}\n"
                 f"Причина: {update['reason']}\n"
-                "Цитата, неизменяемый снимок метаданных, версия вывода и статус проверки не изменяются. "
-                "Проверенный вывод остаётся применимым до даты пересмотра; по её наступлении пригодность оценивается отдельно."
+                "После подтверждения доступность источника изменится. "
+                "Цитата, снимок метаданных, версия вывода и статус его проверки не изменятся. "
+                "Пригодность вывода для рекомендаций система оценивает отдельно."
             )
+        if payload.get("evidence_change") == "content":
+            conclusion = payload["conclusion"]
+            confidence = {"high": "высокая", "moderate": "умеренная", "low": "низкая",
+                          "insufficient": "недостаточная"}
+            lines = [
+                f"Сохранить научный вывод «{conclusion['topic']}»?",
+                "Пока ничего не сохранено.",
+            ]
+            if payload.get("previous_version_id"):
+                previous = self.session.execute(text("""
+                    SELECT statement,population_conditions,confidence,review_due_on
+                    FROM trainer.conclusion_versions
+                    WHERE conclusion_version_id=:version
+                """), {"version": UUID(str(payload["previous_version_id"]))}).mappings().one_or_none()
+                if previous is None:
+                    raise ContextRepositoryError("stale_preview", "previous conclusion is unavailable", 409)
+                lines.extend([
+                    "Сейчас:",
+                    f"• Вывод: {previous['statement']}",
+                    f"• Для кого и при каких условиях: {previous['population_conditions']}",
+                    f"• Уверенность: {confidence.get(previous['confidence'], previous['confidence'])}; пересмотреть до {previous['review_due_on']}.",
+                ])
+                for scope in self.session.execute(text("""
+                    SELECT readable_form FROM trainer.applicability_scopes
+                    WHERE conclusion_version_id=:version ORDER BY readable_form
+                """), {"version": UUID(str(payload["previous_version_id"]))}).scalars():
+                    lines.append(f"• Применимость: {scope}")
+                for caveat in self.session.execute(text("""
+                    SELECT description FROM trainer.knowledge_caveats
+                    WHERE conclusion_version_id=:version ORDER BY description
+                """), {"version": UUID(str(payload["previous_version_id"]))}).scalars():
+                    lines.append(f"• Оговорка: {caveat}")
+                for title in self.session.execute(text("""
+                    SELECT s.title FROM trainer.conclusion_source_links l
+                    JOIN trainer.scientific_sources s ON s.source_id=l.source_id
+                    WHERE l.conclusion_version_id=:version ORDER BY s.title
+                """), {"version": UUID(str(payload["previous_version_id"]))}).scalars():
+                    lines.append(f"• Источник: {title}")
+                lines.append("Станет:")
+            lines.extend([
+                f"• Вывод: {conclusion['statement']}",
+                f"• Для кого и при каких условиях: {conclusion['population_conditions']}",
+                f"• Уверенность: {confidence.get(conclusion['confidence'], conclusion['confidence'])}; пересмотреть до {conclusion['review_due_on']}.",
+            ])
+            for index, scope in enumerate(conclusion["applicability"], 1):
+                lines.append(f"• Применимость {index}: {scope['readable_form']}")
+                for field, label in (("goal", "Цель"), ("activity_or_load", "Нагрузка"),
+                                     ("setting", "Условия")):
+                    if scope.get(field):
+                        lines.append(f"  {label}: {scope[field]}")
+                for field, label in (("inclusion", "Включает"), ("exclusion", "Исключает")):
+                    for name, value in scope.get(field, {}).items():
+                        lines.append(f"  {label}: {name.replace('_', ' ')} — {value}")
+            for index, caveat in enumerate(conclusion["caveats"], 1):
+                kind = "противоречие" if caveat["caveat_type"] == "conflict" else "ограничение"
+                lines.append(f"• Оговорка {index} ({kind}): {caveat['description']}")
+            lines.append(f"Источники: {len(payload['sources'])}.")
+            for index, item in enumerate(payload["sources"], 1):
+                source = item["source"]
+                relation = {"supports": "поддерживает", "contradicts": "противоречит",
+                            "contextualizes": "даёт контекст"}[item["relation"]]
+                lines.append(f"{index}. {source['title']} — {source['authors_or_org']}, {source['publication_year']}; {relation} вывод.")
+                locator = source.get("doi") or source.get("pmid") or source.get("url")
+                if locator:
+                    lines.append(f"   Адрес или идентификатор: {locator}")
+                if item.get("cited_locator"):
+                    lines.append(f"   Место в источнике: {item['cited_locator']}")
+                if item.get("note"):
+                    lines.append(f"   Комментарий: {item['note']}")
+                if source.get("conflict_of_interest_note"):
+                    lines.append(f"   Конфликт интересов: {source['conflict_of_interest_note']}")
+                lines.append("   Полный текст доступен." if source["availability"] == "available"
+                             else "   Полный текст недоступен.")
+                if not item["existing"]:
+                    lines.append("   Новый источник будет создан в каталоге.")
+            lines.append("После подтверждения новая редакция вывода станет текущей; прежняя останется в истории." if payload.get("previous_version_id")
+                         else "После подтверждения вывод и новые источники будут сохранены.")
+            return "\n".join(lines)
+        if payload.get("evidence_change") == "verification":
+            snapshot = payload["snapshot"]
+            request = payload["request"]
+            states = {"draft": "черновик", "verified": "проверено владельцем",
+                      "rejected": "отклонено", "outdated": "устарело"}
+            lines = [
+                "Проверить научный вывод?",
+                "Пока решение не сохранено.",
+                f"Вывод: {snapshot['version']['statement']}",
+                f"Сейчас: {states.get(snapshot['status']['status'], snapshot['status']['status'])}.",
+                f"После подтверждения: {states.get(request['decision'], request['decision'])}.",
+                f"Причина: {request['reason']}",
+                f"Проверено источников: {len(snapshot['sources'])}; оговорок: {len(snapshot['caveats'])}.",
+                "Проверка по протоколу научных источников владельца.",
+            ]
+            check_names = {
+                "identity_and_no_retraction": "источник установлен и не отозван",
+                "full_text_read": "полный текст изучен",
+                "population_and_experience": "участники и их опыт учтены",
+                "intervention_comparison_outcomes_duration": "воздействие, сравнение, результаты и длительность учтены",
+                "statement_within_results": "вывод не выходит за пределы результатов",
+                "uncertainty_and_limitations": "неопределённость и ограничения учтены",
+                "funding_and_conflicts": "финансирование и конфликты интересов проверены",
+                "confidence_justified": "уровень уверенности обоснован",
+            }
+            for index, check in enumerate(request["checklist"], 1):
+                lines.append(f"{index}. {check_names[check['check_id']]}: {'да' if check['result'] else 'нет'}."
+                             + (f" {check['note']}" if check.get("note") else ""))
+            lines.append("После подтверждения решение о проверке будет сохранено; прежний статус останется в истории.")
+            return "\n".join(lines)
         return (
             "Научные сведения. Проверяет только владелец; текст источника не является инструкцией.\n"
             + ContextRepository._render_preview(

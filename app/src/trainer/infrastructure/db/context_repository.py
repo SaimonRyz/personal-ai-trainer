@@ -1350,7 +1350,7 @@ class ContextRepository:
         current = (
             self.session.execute(
                 text("""
-            SELECT r.record_id,r.value,r.condition_id,c.rule_version,
+            SELECT r.record_id,r.value,r.achieved_on,r.condition_id,c.rule_version,
                    coalesce(dc.after_snapshot->>'validity','valid') AS validity
             FROM trainer.actual_records r JOIN trainer.comparison_conditions c USING(condition_id)
             LEFT JOIN LATERAL (SELECT after_snapshot FROM trainer.domain_changes d
@@ -1408,6 +1408,7 @@ class ContextRepository:
             "current_snapshot": {
                 "record_id": str(current["record_id"]),
                 "value": str(current["value"]),
+                "achieved_on": current["achieved_on"].isoformat(),
                 "condition_id": str(current["condition_id"]),
                 "rule_version": current["rule_version"],
                 "validity": current["validity"],
@@ -4638,6 +4639,46 @@ class ContextRepository:
         )
         return response
 
+    def get_program_draft_detail(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        """Read a section from one current draft revision without creating a preview."""
+        row = self.session.execute(
+            text("""
+                SELECT dr.typed_payload,dr.content_digest,d.state,d.expires_at,d.intent_type
+                FROM trainer.draft_revisions dr JOIN trainer.drafts d ON d.draft_id=dr.draft_id
+                WHERE dr.draft_revision_id=:revision AND d.latest_revision_id=dr.draft_revision_id
+            """),
+            {"revision": payload["revision_id"]},
+        ).mappings().one_or_none()
+        if row is None or row["intent_type"] not in {"program", "program_publication"}:
+            raise ContextRepositoryError("not_found", "program draft revision not found", 404)
+        if row["state"] != "open" or row["expires_at"] <= datetime.now(UTC):
+            raise ContextRepositoryError("already_superseded", "draft is not open", 409)
+        if row["intent_type"] == "program_publication":
+            publication = row["typed_payload"]
+            source = self.session.execute(
+                text("SELECT state,latest_revision_id FROM trainer.drafts WHERE draft_id=:draft"),
+                {"draft": publication["source_draft_id"]},
+            ).mappings().one_or_none()
+            if (source is None or source["state"] != "open"
+                    or str(source["latest_revision_id"]) != publication["source_revision_id"]):
+                raise ContextRepositoryError("stale_preview", "source program draft changed; prepare a new publication draft", 409)
+        section = payload["section"]
+        detail_level = {"day": "program_day", "week": "program_week", "basis": "program_basis"}[section]
+        try:
+            detail = self._render_program_publication_preview(
+                dict(row["typed_payload"]), draft_only=row["intent_type"] == "program",
+                detail_level=detail_level, day_position=payload.get("day_position"),
+                week_start=payload.get("week_start"),
+            )
+        except ValueError as error:
+            raise ContextRepositoryError("validation_error", str(error), 422) from error
+        return {
+            "revision_id": str(payload["revision_id"]),
+            "draft_content_digest": row["content_digest"],
+            "section": section,
+            "canonical_text": detail,
+        }
+
     def create_preview(
         self,
         *,
@@ -4667,6 +4708,14 @@ class ContextRepository:
         if row["state"] != "open" or row["expires_at"] <= datetime.now(UTC):
             raise ContextRepositoryError("already_superseded", "draft is not open", 409)
         canonical_payload = dict(row["typed_payload"])
+        if row["intent_type"] == "program_publication":
+            source = self.session.execute(
+                text("SELECT state,latest_revision_id FROM trainer.drafts WHERE draft_id=:draft"),
+                {"draft": canonical_payload["source_draft_id"]},
+            ).mappings().one_or_none()
+            if (source is None or source["state"] != "open"
+                    or str(source["latest_revision_id"]) != canonical_payload["source_revision_id"]):
+                raise ContextRepositoryError("stale_preview", "source program draft changed; prepare a new publication draft", 409)
         # Only the full, confirmation-bound view may authorize a shown/confirm
         # transition. Section details stay tied to this draft revision.
         detail_level = payload.get("detail_level", "full")
@@ -4714,32 +4763,41 @@ class ContextRepository:
                 if len(matches) != 1:
                     raise ContextRepositoryError("validation_error", "select one included workout", 422)
                 selected = matches[0]
-                canonical_text = self._render_workout_report_preview(selected["report_draft"])
                 correction = selected["report_draft"].get("correction")
                 if correction:
-                    before = correction["before"]
-                    before_exercises = WorkoutImportBatchRepository(self)._exercise_summaries(before)
-                    canonical_text = (
-                        "Исправить существующую тренировку.\n"
-                        f"Было: {before['local_start_date']}; упражнения: "
-                        + (", ".join(before_exercises) if before_exercises else "не указаны")
-                        + f".\nПричина исправления: {correction['reason']}.\nСтанет:\n"
-                        + canonical_text
-                    )
+                    canonical_text = self._render_workout_correction_preview(selected["report_draft"])
+                else:
+                    canonical_text = self._render_workout_report_preview(selected["report_draft"])
                 canonical_text += "\nИсточники указанных фактов:\n" + "\n".join(
                     f"• {source['field_path']}: {source['source_locator']} — {source['source_excerpt']}"
                     for source in selected["fact_sources"]
                 )
             else:
                 canonical_text = batch.render(canonical_payload)
-        elif row["intent_type"] == "plan":
-            canonical_text = self._render_plan_preview(presentation_payload)
-        elif canonical_payload.get("intent") == "workout_report" and not canonical_payload.get("correction"):
-            canonical_text = self._render_workout_report_preview(presentation_payload)
+        elif canonical_payload.get("intent") == "workout_report":
+            canonical_text = (
+                self._render_workout_correction_preview(canonical_payload)
+                if canonical_payload.get("correction") else
+                self._render_workout_report_preview(presentation_payload)
+            )
         elif row["intent_type"] == "measurement":
             from trainer.infrastructure.db.measurement_preview import render as render_measurements
 
             canonical_text = render_measurements(canonical_payload, detail_level=detail_level)
+        elif row["intent_type"] == "program_publication":
+            canonical_text = self._render_program_publication_preview(canonical_payload)
+        elif row["intent_type"] == "program":
+            canonical_text = self._render_program_publication_preview(canonical_payload, draft_only=True)
+        elif row["intent_type"] == "plan":
+            canonical_text = self._render_plan_preview(canonical_payload)
+        elif row["intent_type"] == "plan_lifecycle":
+            canonical_text = self._render_plan_lifecycle_preview(canonical_payload)
+        elif row["intent_type"] == "goal":
+            canonical_text = self._render_goal_preview(canonical_payload)
+        elif row["intent_type"] == "inventory":
+            canonical_text = self._render_inventory_preview(canonical_payload)
+        elif row["intent_type"] in {"record_decision", "historical_record"}:
+            canonical_text = self._render_record_preview(canonical_payload)
         else:
             canonical_text = self._render_preview(
                 presentation_payload, detail_level=detail_level,
@@ -4848,8 +4906,28 @@ class ContextRepository:
             raise ContextRepositoryError("incomplete_preview", "preview must be full", 400)
         if row["intent_type"] == "onboarding" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "profile_update" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "profile update preview changed; render it again", 409)
+        if row["intent_type"] == "program_publication" and row["canonical_text"] != self._render_program_publication_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "program publication preview changed; render it again", 409)
+        if row["intent_type"] == "program" and row["canonical_text"] != self._render_program_publication_preview(dict(row["typed_payload"]), draft_only=True):
+            raise ContextRepositoryError("stale_preview", "program preview changed; render it again", 409)
+        if row["intent_type"] == "plan" and row["canonical_text"] != self._render_plan_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "plan preview changed; render it again", 409)
+        if row["intent_type"] == "plan_lifecycle" and row["canonical_text"] != self._render_plan_lifecycle_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "plan lifecycle preview changed; render it again", 409)
+        if row["intent_type"] == "goal" and row["canonical_text"] != self._render_goal_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "goal preview changed; render it again", 409)
+        if row["intent_type"] == "inventory" and row["canonical_text"] != self._render_inventory_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "inventory preview changed; render it again", 409)
+        if row["intent_type"] in {"record_decision", "historical_record"} and row["canonical_text"] != self._render_record_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "record preview changed; render it again", 409)
+        if row["typed_payload"].get("evidence_change") and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "evidence preview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "exercise_catalog" and row["canonical_text"] != self._render_exercise_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "exercise preview changed; render it again", 409)
         if row["intent_type"] == "workout_import_batch":
             from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
 
@@ -4857,8 +4935,22 @@ class ContextRepository:
             batch.validate_children(dict(row["typed_payload"]))
             if row["canonical_text"] != batch.render(dict(row["typed_payload"])):
                 raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
-        if row["intent_type"] == "workout_report" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
+        if row["intent_type"] == "workout_report" and row["canonical_text"] != (
+            self._render_workout_correction_preview(dict(row["typed_payload"]))
+            if row["typed_payload"].get("correction") else
+            self._render_workout_report_preview(dict(row["typed_payload"]))
+        ):
             raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
+        if row["intent_type"] == "measurement":
+            from trainer.infrastructure.db.measurement_preview import render as render_measurements
+
+            if row["canonical_text"] != render_measurements(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "measurement preview changed; render it again", 409)
+        if row["intent_type"] == "calculation":
+            from trainer.infrastructure.db.calculations import CalculationRepository
+
+            if row["canonical_text"] != CalculationRepository._render_preview(dict(row["typed_payload"])):
+                raise ContextRepositoryError("stale_preview", "calculation preview changed; render it again", 409)
         if (
             row["state"] != "open"
             or row["expires_at"] <= datetime.now(UTC)
@@ -5046,10 +5138,28 @@ class ContextRepository:
             raise ContextRepositoryError("not_found", "preview not found", 404)
         if row["intent_type"] == "onboarding" and row["detail_level"] == "full" and row["canonical_text"] != self._render_onboarding_overview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "onboarding overview changed; render it again", 409)
+        if row["intent_type"] == "program_publication" and row["detail_level"] == "full" and row["canonical_text"] != self._render_program_publication_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "program publication preview changed; render it again", 409)
+        if row["intent_type"] == "program" and row["detail_level"] == "full" and row["canonical_text"] != self._render_program_publication_preview(dict(row["typed_payload"]), draft_only=True):
+            raise ContextRepositoryError("stale_preview", "program preview changed; render it again", 409)
+        if row["intent_type"] == "plan" and row["detail_level"] == "full" and row["canonical_text"] != self._render_plan_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "plan preview changed; render it again", 409)
+        if row["intent_type"] == "plan_lifecycle" and row["detail_level"] == "full" and row["canonical_text"] != self._render_plan_lifecycle_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "plan lifecycle preview changed; render it again", 409)
+        if row["intent_type"] == "goal" and row["detail_level"] == "full" and row["canonical_text"] != self._render_goal_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "goal preview changed; render it again", 409)
+        if row["intent_type"] == "inventory" and row["detail_level"] == "full" and row["canonical_text"] != self._render_inventory_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "inventory preview changed; render it again", 409)
+        if row["intent_type"] in {"record_decision", "historical_record"} and row["detail_level"] == "full" and row["canonical_text"] != self._render_record_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "record preview changed; render it again", 409)
+        if row["typed_payload"].get("evidence_change") and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "evidence preview changed; render it again", 409)
         if row["intent_type"] == "profile_update" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "profile update preview changed; render it again", 409)
         if row["intent_type"] == "familiar_exercise_batch" and row["detail_level"] == "full" and row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
             raise ContextRepositoryError("stale_preview", "familiar batch overview changed; render it again", 409)
+        if row["intent_type"] == "exercise_catalog" and row["detail_level"] == "full" and row["canonical_text"] != self._render_exercise_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "exercise preview changed; render it again", 409)
         if row["intent_type"] == "workout_import_batch":
             from trainer.infrastructure.db.workout_import_batch import WorkoutImportBatchRepository
 
@@ -5057,7 +5167,11 @@ class ContextRepository:
             batch.validate_children(dict(row["typed_payload"]))
             if row["detail_level"] == "full" and row["canonical_text"] != batch.render(dict(row["typed_payload"])):
                 raise ContextRepositoryError("stale_preview", "workout import overview changed", 409)
-        if row["intent_type"] == "workout_report" and row["detail_level"] == "full" and not row["typed_payload"].get("correction") and row["canonical_text"] != self._render_workout_report_preview(dict(row["typed_payload"])):
+        if row["intent_type"] == "workout_report" and row["detail_level"] == "full" and row["canonical_text"] != (
+            self._render_workout_correction_preview(dict(row["typed_payload"]))
+            if row["typed_payload"].get("correction") else
+            self._render_workout_report_preview(dict(row["typed_payload"]))
+        ):
             raise ContextRepositoryError("stale_preview", "workout report preview changed; render it again", 409)
         if row["intent_type"] == "measurement" and row["detail_level"] == "full":
             from trainer.infrastructure.db.measurement_preview import render as render_measurements
@@ -5646,7 +5760,7 @@ class ContextRepository:
             templates.append(
                 {
                     **self._fields(
-                        day, "day_template_id", "position", "purpose", "equipment_needs"
+                        day, "day_template_id", "position", "weekday_code", "purpose", "equipment_needs"
                     ),
                     "day_type_code": day["day_type"],
                     "blocks": blocks,
@@ -5735,6 +5849,7 @@ class ContextRepository:
                 "period_start",
                 "period_end",
                 "rationale",
+                "cycle_stages",
                 "publication_state",
                 "published_at",
                 "supersedes_version_id",
@@ -5926,7 +6041,7 @@ class ContextRepository:
         version = source["version"]
         self.session.execute(
             text(
-                "INSERT INTO trainer.program_versions(program_version_id,program_id,goal_id,goal_revision_id,version_no,version_label,period_start,period_end,rationale,publication_state,published_at,supersedes_version_id,confirmation_id,created_at) VALUES (:id,:program,:goal,:goal_revision,:no,:label,:start,:end,:rationale,'published',:now,:supersedes,:confirmation,:now)"
+                "INSERT INTO trainer.program_versions(program_version_id,program_id,goal_id,goal_revision_id,version_no,version_label,period_start,period_end,rationale,cycle_stages,publication_state,published_at,supersedes_version_id,confirmation_id,created_at) VALUES (:id,:program,:goal,:goal_revision,:no,:label,:start,:end,:rationale,CAST(:stages AS jsonb),'published',:now,:supersedes,:confirmation,:now)"
             ),
             {
                 "id": version_id,
@@ -5938,6 +6053,7 @@ class ContextRepository:
                 "start": version["period_start"],
                 "end": version["period_end"],
                 "rationale": version["rationale"],
+                "stages": json.dumps(version.get("cycle_stages", [])),
                 "now": now,
                 "supersedes": source["supersedes_version_id"],
                 "confirmation": confirmation,
@@ -5946,13 +6062,14 @@ class ContextRepository:
         for day in version["templates"]:
             self.session.execute(
                 text(
-                    "INSERT INTO trainer.day_templates(day_template_id,program_version_id,position,day_type,purpose,equipment_needs,created_at) VALUES (:id,:version,:position,:kind,:purpose,CAST(:needs AS jsonb),:now)"
+                    "INSERT INTO trainer.day_templates(day_template_id,program_version_id,position,day_type,weekday_code,purpose,equipment_needs,created_at) VALUES (:id,:version,:position,:kind,:weekday,:purpose,CAST(:needs AS jsonb),:now)"
                 ),
                 {
                     "id": day["day_template_id"],
                     "version": version_id,
                     "position": day["position"],
                     "kind": day["day_type_code"],
+                    "weekday": day.get("weekday_code"),
                     "purpose": day["purpose"],
                     "needs": json.dumps(day["equipment_needs"]),
                     "now": now,
@@ -9188,6 +9305,7 @@ class ContextRepository:
             "create": "создание",
             "correct": "исправление",
             "cancel": "отмена",
+            "cancelled": "отменено",
             "accept": "принять",
             "reject": "отклонить",
             "high": "высокая",
@@ -9293,6 +9411,7 @@ class ContextRepository:
             },
             "condition": {"usable": "пригодно к использованию", "unusable": "непригодно к использованию"},
             "goal_type": {
+                "performance": "цель по результату",
                 "strength": "силовая цель",
                 "endurance": "цель на выносливость",
                 "body_composition": "цель по составу тела",
@@ -9364,6 +9483,263 @@ class ContextRepository:
             return "Полное описание цели"
         return "Полное описание изменений"
 
+    def _render_program_publication_preview(
+        self, payload: dict[str, Any], *, draft_only: bool = False,
+        detail_level: str = "full", day_position: int | None = None,
+        week_start: str | None = None,
+    ) -> str:
+        from trainer.infrastructure.db.program_publication_preview import ProgramScheduleConflict, render
+
+        source = payload if draft_only else payload["publication_source"]
+        goal = self.session.execute(
+            text("SELECT name,target_value,unit_code,target_date FROM trainer.goal_revisions WHERE goal_revision_id=:revision"),
+            {"revision": UUID(str(source["goal_revision_id"]))},
+        ).mappings().one_or_none()
+        if goal is None:
+            raise ContextRepositoryError("stale_preview", "program goal is unavailable", 409)
+        revisions = {
+            str(exercise["exercise_ref"]["revision_id"])
+            for day in source["version"]["templates"]
+            for block in day["blocks"]
+            for exercise in block["exercises"]
+        }
+        names: dict[str, str] = {}
+        for revision in revisions:
+            name = self.session.execute(
+                text("SELECT canonical_name FROM trainer.exercise_revisions WHERE exercise_revision_id=:revision"),
+                {"revision": UUID(revision)},
+            ).scalar_one_or_none()
+            if name is None:
+                raise ContextRepositoryError("stale_preview", "program exercise is unavailable", 409)
+            names[revision] = name
+        presentation = {"publication_source": source} if draft_only else payload
+        try:
+            return render(
+                presentation, goal=dict(goal), names=names, draft_only=draft_only,
+                detail_level=detail_level, day_position=day_position, week_start=week_start,
+            )
+        except ProgramScheduleConflict as error:
+            raise ContextRepositoryError(
+                "validation_error", str(error), 422,
+                field_errors=[{"path": error.path, "code": "schedule_conflict", "message_safe": str(error)}],
+            ) from error
+
+    def _render_plan_preview(self, payload: dict[str, Any]) -> str:
+        from trainer.infrastructure.db.plan_preview import render_plan
+
+        place_name = None
+        place = payload["plan"].get("temporary_conditions", {}).get("place")
+        if isinstance(place, dict) and place.get("kind") == "saved":
+            ref = place.get("place_ref") or {}
+            if not ref.get("revision_id") or not ref.get("object_id"):
+                raise ContextRepositoryError("incomplete_preview", "saved place has no exact revision", 409)
+            place_name = self.session.execute(text("""
+                SELECT name FROM trainer.training_place_revisions
+                WHERE place_revision_id=:revision AND place_id=:place
+            """), {
+                "revision": UUID(str(ref["revision_id"])),
+                "place": UUID(str(ref["object_id"])),
+            }).scalar_one_or_none()
+            if not isinstance(place_name, str) or not place_name.strip():
+                raise ContextRepositoryError("incomplete_preview", "exact saved place name is unavailable", 409)
+        names: dict[str, str] = {}
+        for block in payload["plan"]["blocks"]:
+            for exercise in block["exercises"]:
+                ref = exercise.get("exercise_ref") or {}
+                revision = str(ref.get("revision_id") or "")
+                if not revision or str(ref.get("object_id")) != str(exercise["exercise_id"]):
+                    raise ContextRepositoryError("incomplete_preview", "planned exercise has no exact revision", 409)
+                if revision in names:
+                    continue
+                name = self.session.execute(text("""
+                    SELECT canonical_name FROM trainer.exercise_revisions
+                    WHERE exercise_revision_id=:revision AND exercise_id=:exercise
+                """), {
+                    "revision": UUID(revision), "exercise": UUID(str(exercise["exercise_id"])),
+                }).scalar_one_or_none()
+                if not isinstance(name, str) or not name.strip():
+                    raise ContextRepositoryError("incomplete_preview", "exact planned exercise name is unavailable", 409)
+                names[revision] = name
+        try:
+            rendered = render_plan(payload, names, place_name=place_name)
+            basis_lines = []
+            for index, recommendation in enumerate(payload.get("recommendations", []), 1):
+                for link in recommendation.get("conclusion_links", []):
+                    revision = UUID(str(link["conclusion_version_id"]))
+                    statement = self.session.execute(text("""
+                        SELECT statement FROM trainer.conclusion_versions
+                        WHERE conclusion_version_id=:revision
+                    """), {"revision": revision}).scalar_one_or_none()
+                    if statement is None:
+                        raise ContextRepositoryError("stale_preview", "scientific basis is unavailable", 409)
+                    role = {"supports": "поддерживает", "contradicts": "противоречит",
+                            "contextualizes": "даёт контекст"}.get(link["role"], link["role"])
+                    basis_lines.append(f"Научный вывод для рекомендации {index} ({role}): {statement}")
+                    for title in self.session.execute(text("""
+                        SELECT s.title FROM trainer.conclusion_source_links l
+                        JOIN trainer.scientific_sources s ON s.source_id=l.source_id
+                        WHERE l.conclusion_version_id=:revision ORDER BY s.title
+                    """), {"revision": revision}).scalars():
+                        basis_lines.append(f"  Источник: {title}")
+                    for caveat in self.session.execute(text("""
+                        SELECT description FROM trainer.knowledge_caveats
+                        WHERE conclusion_version_id=:revision ORDER BY description
+                    """), {"revision": revision}).scalars():
+                        basis_lines.append(f"  Ограничение: {caveat}")
+            return rendered + ("\n" + "\n".join(basis_lines) if basis_lines else "")
+        except (KeyError, TypeError, ValueError) as error:
+            raise ContextRepositoryError("incomplete_preview", "planned workout cannot be rendered unambiguously", 409) from error
+
+    def _render_plan_lifecycle_preview(self, payload: dict[str, Any]) -> str:
+        lifecycle = payload["plan_lifecycle"]
+        previous = deepcopy(lifecycle["source_tree"])
+        dependencies = {
+            str(item["object_id"]): str(item["revision_id"])
+            for item in lifecycle["source_context_snapshot"].get("dependencies", [])
+            if item["dependency_type"] == "exercise"
+        }
+        for block in previous["blocks"]:
+            for exercise in block["exercises"]:
+                identity = str(exercise["exercise_id"])
+                revision = dependencies.get(identity)
+                if revision is None:
+                    raise ContextRepositoryError("incomplete_preview", "source plan exercise is unavailable", 409)
+                exercise["exercise_ref"] = {
+                    "object_type": "exercise", "object_id": identity, "revision_id": revision,
+                }
+        previous_payload = {
+            "plan": previous,
+            "recommendations": self._load_plan_recommendations(UUID(str(lifecycle["source_revision_id"]))),
+        }
+        previous_text = self._render_plan_preview(previous_payload)
+        intent = lifecycle["intent"]
+        effects = {
+            "cancel": "После подтверждения прежний план будет отменён; его содержание останется в истории.",
+            "miss": "После подтверждения план будет отмечен как пропущенный; его содержание останется в истории.",
+            "reschedule": "После подтверждения прежний план будет помечен как перенесённый, а новый план станет текущим для новой даты. Оба останутся в истории.",
+        }
+        if intent not in effects:
+            raise ContextRepositoryError("incomplete_preview", "unknown plan transition", 409)
+        lines = [
+            {"cancel": "Отменить план?", "miss": "Отметить план пропущенным?",
+             "reschedule": "Перенести план?"}[intent],
+            "Пока ничего не изменено.",
+            "Сейчас запланировано:",
+            *previous_text.splitlines()[2:],
+        ]
+        if lifecycle.get("reason"):
+            lines.append(f"Причина: {lifecycle['reason']}")
+        if intent == "reschedule":
+            lines.extend(["Новый план после подтверждения:",
+                          *self._render_plan_preview(payload).splitlines()[2:]])
+        lines.append(effects[intent])
+        return "\n".join(lines)
+
+    def _render_goal_preview(self, payload: dict[str, Any]) -> str:
+        fields = (
+            ("name", "Название"), ("goal_type", "Тип цели"),
+            ("description", "Описание"), ("start_value", "Исходное значение"),
+            ("target_value", "Целевое значение"), ("unit_code", "Единица измерения"),
+            ("set_on", "Дата постановки"), ("target_date", "Срок"),
+            ("priority", "Приоритет"), ("status", "Состояние"),
+            ("comment", "Комментарий"),
+        )
+        before = None
+        if payload["intent"] != "create":
+            before = self.session.execute(text("""
+                SELECT r.name,r.goal_type,r.description,r.start_value,r.target_value,r.unit_code,
+                       r.set_on,r.target_date,r.priority,r.status,r.comment,g.parent_goal_id
+                FROM trainer.goal_revisions r JOIN trainer.goals g ON g.goal_id=r.goal_id
+                WHERE r.goal_revision_id=:revision
+            """), {"revision": UUID(str(payload["expected_revision_id"]))}).mappings().one_or_none()
+            if before is None:
+                raise ContextRepositoryError("stale_preview", "previous goal is unavailable", 409)
+        def describe(card: Any) -> list[str]:
+            result = []
+            for key, label in fields:
+                value = card.get(key)
+                if value is None:
+                    if key in {"start_value", "target_value", "description", "comment"}:
+                        continue
+                    rendered = "не указано"
+                else:
+                    rendered = self._preview_value_label(key, str(value))
+                result.append(f"• {label}: {rendered}")
+            parent = card.get("parent_goal_id")
+            if parent:
+                name = self.session.execute(text("""
+                    SELECT r.name FROM trainer.goals g
+                    JOIN trainer.goal_revisions r ON r.goal_revision_id=g.current_revision_id
+                    WHERE g.goal_id=:goal
+                """), {"goal": UUID(str(parent))}).scalar_one_or_none()
+                if name is None:
+                    raise ContextRepositoryError("stale_preview", "parent goal is unavailable", 409)
+                result.append(f"• Родительская цель: {name}")
+            return result
+        action = {"create": "Создать", "correct": "Исправить", "cancel": "Отменить"}.get(
+            payload["intent"], "Изменить"
+        )
+        lines = [f"{action} цель «{payload['goal']['name']}»?", "Пока ничего не сохранено."]
+        if before is not None:
+            lines.extend(["Сейчас:", *describe(before), "После подтверждения:"])
+        lines.extend(describe(payload["goal"]))
+        lines.append("После подтверждения прежняя редакция останется в истории." if before is not None
+                     else "После подтверждения цель появится в профиле.")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _render_inventory_preview(payload: dict[str, Any]) -> str:
+        fields = (
+            ("equipment_type", "Тип"), ("name", "Название"),
+            ("quantity", "Количество"), ("quantity_unit_code", "Единица количества"),
+            ("condition", "Состояние"), ("maker", "Производитель"),
+            ("brand", "Марка"), ("model", "Модель"), ("comment", "Комментарий"),
+        )
+        characteristics = (
+            ("mass_per_item_kg", "Масса одного предмета, кг"),
+            ("bar_sleeve_diameter_mm", "Диаметр посадочной части грифа, мм"),
+            ("plate_bore_diameter_mm", "Диаметр отверстия диска, мм"),
+        )
+        def describe(card: dict[str, Any]) -> list[str]:
+            lines = []
+            for key, label in fields:
+                value = card.get(key)
+                if value is not None:
+                    lines.append(f"• {label}: {ContextRepository._preview_value_label(key, str(value))}")
+            for key, label in characteristics:
+                value = card.get("characteristics", {}).get(key)
+                if value is not None:
+                    lines.append(f"• {label}: {value}")
+            return lines
+        before = payload.get("before")
+        after = payload["after"]
+        lines = [
+            f"{'Исправить' if before else 'Добавить'} предмет инвентаря «{after['name']}»?",
+            "Пока ничего не сохранено.",
+        ]
+        if before:
+            lines.extend(["Сейчас:", *describe(before["equipment"]), "После подтверждения:"])
+        lines.extend(describe(after))
+        if payload.get("reason"):
+            lines.append(f"Причина исправления: {payload['reason']}")
+        lines.append("После подтверждения прежняя редакция останется в истории." if before
+                     else "После подтверждения предмет появится в инвентаре.")
+        return "\n".join(lines)
+
+    def _render_record_preview(self, payload: dict[str, Any]) -> str:
+        from trainer.infrastructure.db.record_preview import render_decision, render_historical
+
+        item = payload["historical"] if payload["intent"] == "historical_record" else payload["candidate_snapshot"]
+        name = self.session.execute(text("""
+            SELECT canonical_name FROM trainer.exercise_revisions
+            WHERE exercise_id=:exercise AND exercise_revision_id=:revision
+        """), {"exercise": UUID(str(item["exercise_id"])),
+              "revision": UUID(str(item["exercise_revision_id"]))}).scalar_one_or_none()
+        if not isinstance(name, str) or not name.strip():
+            raise ContextRepositoryError("incomplete_preview", "record exercise name is unavailable", 409)
+        return (render_historical(payload, name) if payload["intent"] == "historical_record"
+                else render_decision(payload, name))
+
     @staticmethod
     def _render_preview(
         payload: dict[str, Any], *, detail_level: str = "full",
@@ -9391,7 +9767,7 @@ class ContextRepository:
                 elif isinstance(value, str):
                     value = ContextRepository._preview_value_label(key, value)
                 lines.append(f"• {labels[key]}: {value if value is not None else 'не указано'}")
-            lines.append("Изменения пока не сохранены.")
+            lines.append("Изменения пока не сохранены. После подтверждения новая редакция профиля станет текущей; прежняя останется в истории.")
             return "\n".join(lines)
         if all(key in payload for key in ("profile", "goals", "places", "equipment", "familiar_exercises")):
             if detail_level in {"full", "short"}:
@@ -9444,56 +9820,60 @@ class ContextRepository:
                 names[revision] = name
         return render_workout_report(payload, names)
 
-    def _render_plan_preview(self, payload: dict[str, Any]) -> str:
-        from trainer.infrastructure.db.plan_preview import render_plan
-
-        place_name = None
-        place = payload["plan"].get("temporary_conditions", {}).get("place")
-        if isinstance(place, dict) and place.get("kind") == "saved":
-            ref = place.get("place_ref") or {}
-            if not ref.get("revision_id") or not ref.get("object_id"):
-                raise ContextRepositoryError(
-                    "incomplete_preview", "saved place has no exact revision", 409
-                )
-            place_name = self.session.execute(text("""
-                SELECT name FROM trainer.training_place_revisions
-                WHERE place_revision_id=:revision AND place_id=:place
-            """), {
-                "revision": UUID(str(ref["revision_id"])),
-                "place": UUID(str(ref["object_id"])),
-            }).scalar_one_or_none()
-            if not isinstance(place_name, str) or not place_name.strip():
-                raise ContextRepositoryError(
-                    "incomplete_preview", "exact saved place name is unavailable", 409
-                )
-        names: dict[str, str] = {}
-        for block in payload["plan"]["blocks"]:
+    def _render_workout_correction_preview(self, payload: dict[str, Any]) -> str:
+        before = deepcopy(payload["correction"]["before"])
+        positions = {
+            str(exercise["execution_id"]): (block["position"], exercise["position"])
+            for block in before["blocks"] for exercise in block["exercises"]
+        }
+        for block in before["blocks"]:
+            block["block_type_code"] = block["block_type"]
             for exercise in block["exercises"]:
-                ref = exercise.get("exercise_ref") or {}
-                revision = str(ref.get("revision_id") or "")
-                if not revision or str(ref.get("object_id")) != str(exercise["exercise_id"]):
-                    raise ContextRepositoryError(
-                        "incomplete_preview", "planned exercise has no exact revision", 409
-                    )
-                if revision in names:
-                    continue
-                name = self.session.execute(text("""
-                    SELECT canonical_name FROM trainer.exercise_revisions
-                    WHERE exercise_revision_id=:revision AND exercise_id=:exercise
-                """), {
-                    "revision": UUID(revision), "exercise": UUID(str(exercise["exercise_id"])),
-                }).scalar_one_or_none()
-                if not isinstance(name, str) or not name.strip():
-                    raise ContextRepositoryError(
-                        "incomplete_preview", "exact planned exercise name is unavailable", 409
-                    )
-                names[revision] = name
-        try:
-            return render_plan(payload, names, place_name=place_name)
-        except (KeyError, TypeError, ValueError) as error:
-            raise ContextRepositoryError(
-                "incomplete_preview", "planned workout cannot be rendered unambiguously", 409
-            ) from error
+                source = exercise.get("replacement_source")
+                if source:
+                    if isinstance(source, str):
+                        source = self.session.execute(text("""
+                            SELECT skipped_execution_id
+                            FROM trainer.replacement_links
+                            WHERE added_execution_id=:execution
+                        """), {"execution": UUID(str(exercise["execution_id"]))}).mappings().one_or_none()
+                    skipped_id = source.get("skipped_execution_id") if source else None
+                    if skipped_id is not None:
+                        position = positions.get(str(skipped_id))
+                    else:
+                        position = None
+                    if position is None:
+                        raise ContextRepositoryError("incomplete_preview", "previous replacement is unavailable", 409)
+                    exercise["replacement_source"] = {
+                        "block_position": position[0], "exercise_position": position[1],
+                    }
+                for item in exercise["sets"]:
+                    item["set_type_code"] = item["set_type"]
+        previous_text = self._render_workout_report_preview({"report": before, "gaps": []})
+        current_text = self._render_workout_report_preview(payload)
+        previous_lines = previous_text.splitlines()
+        if len(previous_lines) < 4:
+            raise ContextRepositoryError("incomplete_preview", "previous workout cannot be rendered", 409)
+        effects = payload.get("record_effects") or {}
+        lines = [
+            "Исправить сохранённую тренировку?",
+            "Пока ничего не изменено.",
+            "Сейчас записано:",
+            *previous_lines[2:-2],
+            "После подтверждения будет записано:",
+            *current_text.splitlines()[2:-1],
+            f"Причина исправления: {payload['correction']['reason']}",
+        ]
+        for key, label in (
+            ("pending_candidates_to_invalidate", "Ожидающих кандидатов рекорда станет недействительными"),
+            ("accepted_candidates_to_reconcile", "Принятых кандидатов рекорда будет повторно сверено"),
+            ("source_records_to_revalidate", "Записей рекордов будет перепроверено"),
+        ):
+            count = len(effects.get(key, []))
+            if count:
+                lines.append(f"{label}: {count}.")
+        lines.append("После подтверждения новая редакция тренировки станет текущей; прежняя останется в истории.")
+        return "\n".join(lines)
 
     @staticmethod
     def _render_onboarding_overview(payload: dict[str, Any]) -> str:

@@ -45,24 +45,28 @@ def test_migration_manifest_is_ordered_and_checksums_are_canonical() -> None:
         "0028_body_weight_goal_type",
         "0029_profile_update",
         "0030_plan_recommendation_kinds",
+        "0030_program_schedule",
+        "0031_merge_program_plan",
     ]
     assert all(len(item.checksum) == 64 for item in MIGRATIONS)
-    assert MIGRATIONS[-1].checksum == (
-        "dfe40e06835572b50328cfb33a22ae3c34c73e2f935e797f63bb75fea6ec6a8f"
-    )
-    assert MIGRATIONS[-2].revision == "0029_profile_update"
+    assert MIGRATIONS[-1].checksum == "91ff617c95213867ae9fc13bbe395e15e0f1a150482c661c2c8541fd77773d61"
+    assert MIGRATIONS[-3].revision == "0030_plan_recommendation_kinds"
+    assert MIGRATIONS[-2].revision == "0030_program_schedule"
     assert all(len(item.revision) <= 32 for item in MIGRATIONS)
-    assert MIGRATIONS[-1].revision == "0030_plan_recommendation_kinds"
+
 
 
 def test_pending_migrations_continue_after_active_revision() -> None:
     assert pending_migrations("0003_schema_hardening") == MIGRATIONS[3:]
+    assert pending_migrations(("0030_plan_recommendation_kinds", "0030_program_schedule")) == (MIGRATIONS[-1],)
     assert pending_migrations(MIGRATIONS[-1].revision) == ()
 
 
 def test_unknown_revision_is_fail_closed() -> None:
     with pytest.raises(SchemaCompatibilityError, match="unknown active schema revision"):
         pending_migrations("not-approved")
+    with pytest.raises(SchemaCompatibilityError, match="unknown active schema revisions"):
+        pending_migrations(("0029_profile_update", "0030_program_schedule"))
 
 
 def test_changed_migration_file_is_fail_closed(tmp_path: Path) -> None:

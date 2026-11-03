@@ -77,6 +77,7 @@ def test_active_tool_catalog_is_closed_and_contains_no_fixture_tools() -> None:
         "get_exact_program",
         "get_exercise_exact",
         "get_plan",
+        "get_program_draft_detail",
         "get_planning_context",
         "get_profile_context",
         "get_progress",

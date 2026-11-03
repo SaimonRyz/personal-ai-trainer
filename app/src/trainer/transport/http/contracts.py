@@ -397,6 +397,7 @@ class ProgramTemplateBlockInput(ClosedModel):
 class ProgramDayTemplateInput(ClosedModel):
     position: int = Field(ge=1)
     day_type_code: Literal["training"]
+    weekday_code: Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] | None = None
     purpose: str = Field(min_length=1, max_length=2000)
     blocks: list[ProgramTemplateBlockInput] = Field(min_length=1, max_length=100)
 
@@ -438,12 +439,26 @@ class PlanRecommendationInput(ProgramRecommendationInput):
     )
 
 
+class ProgramStageDayRule(ClosedModel):
+    day_position: int = Field(ge=1)
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class ProgramCycleStageInput(ClosedModel):
+    starts_on: date
+    ends_on: date
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=4000)
+    day_rules: list[ProgramStageDayRule] = Field(default_factory=list, max_length=100)
+
+
 class ProgramVersionDraftInput(ClosedModel):
     version_label: str = Field(min_length=1, max_length=200)
     rationale: str = Field(min_length=1, max_length=4000)
     period_start: date
     period_end: date
     templates: list[ProgramDayTemplateInput] = Field(min_length=1, max_length=100)
+    cycle_stages: list[ProgramCycleStageInput] = Field(default_factory=list, max_length=52)
     recommendations: list[ProgramRecommendationInput]
 
 
@@ -563,6 +578,7 @@ class ProgramDayTemplateView(ClosedModel):
     day_template_id: UUID
     position: int = Field(ge=1)
     day_type_code: Literal["training"]
+    weekday_code: Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] | None = None
     purpose: str = Field(min_length=1, max_length=2000)
     equipment_needs: list[dict[str, object]]
     blocks: list[ProgramTemplateBlockView] = Field(min_length=1, max_length=100)
@@ -597,6 +613,7 @@ class ProgramVersionView(ClosedModel):
     period_start: date
     period_end: date
     rationale: str = Field(min_length=1, max_length=4000)
+    cycle_stages: list[ProgramCycleStageInput] = Field(default_factory=list)
     publication_state: Literal["published", "retired"]
     published_at: datetime
     supersedes_version_id: UUID | None
@@ -1743,6 +1760,29 @@ class PreviewRequest(ClosedModel):
         if (self.detail_level == "workout") != (self.entry_key is not None):
             raise ValueError("entry_key is required only for workout detail")
         return self
+
+
+class ProgramDraftDetailRequest(ClosedModel):
+    context: RequestContext
+    revision_id: UUID
+    section: Literal["day", "week", "basis"]
+    day_position: int | None = Field(default=None, ge=1)
+    week_start: date | None = None
+
+    @model_validator(mode="after")
+    def validate_target(self) -> ProgramDraftDetailRequest:
+        if (self.section == "day") != (self.day_position is not None):
+            raise ValueError("day_position is required only for day details")
+        if (self.section == "week") != (self.week_start is not None):
+            raise ValueError("week_start is required only for week details")
+        return self
+
+
+class ProgramDraftDetailResponse(ClosedModel):
+    revision_id: UUID
+    draft_content_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    section: Literal["day", "week", "basis"]
+    canonical_text: str
 
 
 class PreviewShownRequest(ClosedModel):

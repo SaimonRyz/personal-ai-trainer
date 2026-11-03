@@ -31,11 +31,38 @@ class CalculationRepository(ContextRepository):
         payload: dict[str, Any], *, detail_level: str = "full",
         entry_name: str | None = None,
     ) -> str:
+        calculated = payload.get("calculated") or {}
+        if calculated.get("metric_kind") == "estimated_1rm":
+            exercise = calculated["exercise"]["canonical_name"]
+            result = calculated["value"]
+            source = calculated["source"]
+            sets = [item for item in calculated["normalized_inputs"] if item["role"] == "actual_set"]
+            if len(sets) != 1:
+                raise ContextRepositoryError("incomplete_preview", "calculation source set is unavailable", 409)
+            repetitions = sets[0]["snapshot"]["full_reps"]
+            lines = [
+                f"Сохранить расчётную оценку максимума для «{exercise}»?",
+                "Пока расчёт не сохранён. Это оценка, а не фактически выполненный рекорд.",
+                f"Исходная тренировка: {source['local_start_date']}.",
+                f"Исходный подход: {calculated['mass_kg']} кг × {repetitions} полных повторений.",
+                f"Оценка максимума на одно повторение: {result['exact_value']} кг.",
+                "Метод: формула Бжицки.",
+            ]
+            attestation = calculated.get("attestation") or {}
+            if attestation:
+                lines.append("Условия выполнения и техники учтены при расчёте; неподтверждённые факты не добавляются.")
+            previous = calculated.get("prior_calculation")
+            if previous:
+                lines.append(f"Прежняя оценка {previous['value']} кг останется в истории как заменённая.")
+            best = calculated.get("best_effect") or {}
+            if best.get("decision") in {"new_current", "strict_improvement"}:
+                lines.append("После подтверждения эта оценка станет лучшей среди сопоставимых расчётных значений.")
+            else:
+                lines.append("После подтверждения оценка войдёт в историю расчётов без замены лучшего сопоставимого значения.")
+            return "\n".join(lines)
         rendered = ContextRepository._render_preview(
             payload, detail_level=detail_level, entry_name=entry_name
         )
-        if payload.get("calculated", {}).get("metric_kind") == "e1rm":
-            return "Расчётный e1RM — оценка, не фактический рекорд.\n" + rendered
         return rendered
 
     def create_calculation_draft(
@@ -233,6 +260,8 @@ class CalculationRepository(ContextRepository):
         )
         if row is None or row["intent_type"] != "calculation":
             raise ContextRepositoryError("not_found", "calculation preview not found", 404)
+        if row["canonical_text"] != self._render_preview(dict(row["typed_payload"])):
+            raise ContextRepositoryError("stale_preview", "calculation preview changed; render it again", 409)
         if (
             str(row["draft_revision_id"]) != str(payload["revision_id"])
             or row["content_digest"] != payload["preview_digest"]

@@ -60,6 +60,8 @@ from trainer.transport.http.contracts import (
     ProfileContextRequest,
     ProfileContextResponse,
     ProgramDraftRequest,
+    ProgramDraftDetailRequest,
+    ProgramDraftDetailResponse,
     ProgramPublicationDraftRequest,
     ProgramQueryRequest,
     ProgramResponse,
@@ -1186,6 +1188,19 @@ def create_app(
                 key=idempotency_key,
                 correlation_id=request.state.correlation_id,
                 causation_id=request.state.causation_id,
+            ),
+            request,
+        )
+
+    @app.post(
+        "/api/v1/queries/program-draft-detail",
+        response_model=DataEnvelope[ProgramDraftDetailResponse],
+        responses=DOMAIN_ERROR_RESPONSES,
+    )
+    def program_draft_detail(body: ProgramDraftDetailRequest, request: Request) -> dict[str, Any]:
+        return envelope(
+            require_context_service().execute(
+                "get_program_draft_detail", payload=body.model_dump(mode="json")
             ),
             request,
         )

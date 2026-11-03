@@ -304,6 +304,7 @@ class ProgramTemplateBlockInput(ClosedModel):
 class ProgramDayTemplateInput(ClosedModel):
     position: int = Field(ge=1)
     day_type_code: Literal["training"]
+    weekday_code: Literal["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] | None = None
     purpose: str = Field(min_length=1, max_length=2000)
     blocks: list[ProgramTemplateBlockInput] = Field(min_length=1, max_length=100)
 
@@ -345,12 +346,26 @@ class PlanRecommendationInput(ProgramRecommendationInput):
     )
 
 
+class ProgramStageDayRule(ClosedModel):
+    day_position: int = Field(ge=1)
+    description: str = Field(min_length=1, max_length=2000)
+
+
+class ProgramCycleStageInput(ClosedModel):
+    starts_on: date
+    ends_on: date
+    title: str = Field(min_length=1, max_length=200)
+    description: str = Field(min_length=1, max_length=4000)
+    day_rules: list[ProgramStageDayRule] = Field(default_factory=list, max_length=100)
+
+
 class ProgramVersionDraftInput(ClosedModel):
     version_label: str = Field(min_length=1, max_length=200)
     rationale: str = Field(min_length=1, max_length=4000)
     period_start: date
     period_end: date
     templates: list[ProgramDayTemplateInput] = Field(min_length=1, max_length=100)
+    cycle_stages: list[ProgramCycleStageInput] = Field(default_factory=list, max_length=52)
     recommendations: list[ProgramRecommendationInput]
 
 
