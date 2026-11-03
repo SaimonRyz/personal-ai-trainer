@@ -78,6 +78,28 @@ def test_complete_plan_tree_is_valid() -> None:
     validate_plan_draft(valid_payload())
 
 
+@pytest.mark.parametrize("round_numbers", [(None, 1), (1, 1)])
+def test_superset_rejects_missing_or_empty_round_with_field_path(
+    round_numbers: tuple[int | None, int],
+) -> None:
+    payload = valid_payload()
+    block = payload["plan"]["blocks"][0]  # type: ignore[index]
+    block["block_type_code"] = "superset"
+    block["declared_rounds"] = 2
+    first = block["exercises"][0]["sets"][0]
+    second = deepcopy(first)
+    second["position"] = 2
+    first["round_no"], second["round_no"] = round_numbers
+    block["exercises"][0]["sets"].append(second)
+    with pytest.raises(DomainValidationError) as caught:
+        validate_plan_draft(payload)
+    errors = caught.value.field_errors
+    assert any(item["path"].startswith("plan.blocks[0]") for item in errors)
+    assert any(item["code"] == "empty_round" for item in errors)
+    if round_numbers[0] is None:
+        assert any(item["code"] == "invalid_round_no" for item in errors)
+
+
 @pytest.mark.parametrize("field", ["program_id", "program_version_id"])
 def test_program_references_must_be_complete_pairs(field: str) -> None:
     payload = valid_payload()

@@ -174,14 +174,44 @@ def test_round_order_and_partial_participation_are_explicit() -> None:
     text = preview([block], first_name | second_name)
     assert "Круги 1–2: Подтягивания → Приседания" in text
     assert "Круги 3–4: Подтягивания" in text
-    assert "круги 1, 2, подходы 1–2" in text
+    assert "круг 1: 1 подход, круг 2: 1 подход, подходы 1–2" in text
     assert "нагрузка не указана" in text
     assert "собственный вес" not in text
-    with pytest.raises(ValueError, match="declared round contains no planned sets"):
-        preview([{**block, "declared_rounds": 5}], first_name | second_name)
+    assert "в круге 5 нет подходов" in preview(
+        [{**block, "declared_rounds": 5}], first_name | second_name
+    )
     first["sets"][0]["round_no"] = 5
-    with pytest.raises(ValueError, match="references no declared round"):
-        preview([block], first_name | second_name)
+    assert "укажите круг от 1 до 4" in preview([block], first_name | second_name)
+
+
+def test_identical_sets_in_different_round_distributions_render_differently() -> None:
+    rendered = []
+    for rounds in ((1, 1, 2), (1, 2, 2)):
+        item, names = exercise(1, "Вымышленное упражнение", [
+            planned_set(position, round_no=number, mass=None)
+            for position, number in enumerate(rounds, 1)
+        ])
+        rendered.append(preview([{
+            "position": 1, "block_type_code": "circuit", "declared_rounds": 2,
+            "exercises": [item],
+        }], names))
+    assert "круг 1: 2 подхода, круг 2: 1 подход" in rendered[0]
+    assert "круг 1: 1 подход, круг 2: 2 подхода" in rendered[1]
+    assert rendered[0] != rendered[1]
+
+
+def test_legacy_superset_round_gaps_are_visible_but_not_offered_for_confirmation() -> None:
+    item, names = exercise(1, "Вымышленное упражнение", [
+        planned_set(1, round_no=None), planned_set(2, round_no=1)
+    ])
+    text = preview([{
+        "position": 1, "block_type_code": "superset", "declared_rounds": 2,
+        "exercises": [item],
+    }], names)
+    assert "без номера круга" in text
+    assert "в круге 2 нет подходов" in text
+    assert "подтвердить этот черновик нельзя" in text
+    assert "Сохранить план?" not in text
 
 
 def test_legacy_circuit_without_explicit_circuit_positions_uses_exercise_order() -> None:

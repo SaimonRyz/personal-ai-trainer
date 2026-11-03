@@ -22,6 +22,12 @@ def validate_plan_draft(payload: dict[str, Any]) -> None:
     if not isinstance(blocks, list) or not blocks:
         raise DomainValidationError("plan requires at least one block")
     _validate_positions(blocks, "blocks")
+    round_issues = plan_round_issues(plan)
+    if round_issues:
+        raise DomainValidationError(
+            "round assignment requires correction",
+            field_errors=round_issues,
+        )
     for block in blocks:
         exercises = block.get("exercises")
         if not isinstance(exercises, list) or not exercises:
@@ -40,6 +46,47 @@ def validate_plan_draft(payload: dict[str, Any]) -> None:
         raise DomainValidationError("recommendations must be a list")
     for recommendation in recommendations:
         _validate_recommendation(recommendation)
+
+
+def plan_round_issues(plan: dict[str, Any]) -> list[dict[str, str]]:
+    """Find ambiguous round assignments without changing legacy draft data."""
+    issues: list[dict[str, str]] = []
+    for block_index, block in enumerate(plan.get("blocks") or []):
+        if block.get("block_type_code") not in {"circuit", "superset"}:
+            continue
+        path = f"plan.blocks[{block_index}]"
+        rounds = block.get("declared_rounds")
+        if not isinstance(rounds, int) or rounds < 1:
+            issues.append({"path": f"{path}.declared_rounds", "code": "missing_round_count",
+                           "message_safe": "Укажите число кругов блока."})
+            continue
+        occupied: set[int] = set()
+        for exercise_index, exercise in enumerate(block.get("exercises") or []):
+            for set_index, planned_set in enumerate(exercise.get("sets") or []):
+                number = planned_set.get("round_no")
+                set_path = f"{path}.exercises[{exercise_index}].sets[{set_index}].round_no"
+                if not isinstance(number, int) or not 1 <= number <= rounds:
+                    issues.append({
+                        "path": set_path,
+                        "code": "invalid_round_no",
+                        "message_safe": (
+                            f"Блок {block_index + 1}, упражнение {exercise_index + 1}, "
+                            f"подход {set_index + 1}: укажите круг от 1 до {rounds}."
+                        ),
+                    })
+                else:
+                    occupied.add(number)
+        for number in range(1, rounds + 1):
+            if number not in occupied:
+                issues.append({
+                    "path": f"{path}.declared_rounds",
+                    "code": "empty_round",
+                    "message_safe": (
+                        f"Блок {block_index + 1}: в круге {number} нет подходов; "
+                        "добавьте их или уменьшите число кругов."
+                    ),
+                })
+    return issues
 
 
 def _validate_source(plan: dict[str, Any]) -> None:

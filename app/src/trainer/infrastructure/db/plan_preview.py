@@ -6,6 +6,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from trainer.domain.plan import plan_round_issues
+
 
 def _number(value: Any) -> str:
     return str(value).rstrip("0").rstrip(".") if "." in str(value) else str(value)
@@ -239,7 +241,7 @@ def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> li
         return []
     rounds = block.get("declared_rounds")
     if not isinstance(rounds, int) or rounds < 1:
-        raise ValueError("circuit block requires a readable round count")
+        return ["  Число кругов не задано — требуется исправление."]
     ordered = sorted(
         block["exercises"], key=lambda item: item.get("circuit_position") or item["position"]
     )
@@ -248,12 +250,6 @@ def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> li
         positions
     ) != len(set(positions)):
         raise ValueError("circuit exercise order is ambiguous")
-    for exercise in ordered:
-        if any(
-            not isinstance(item.get("round_no"), int) or not 1 <= item["round_no"] <= rounds
-            for item in exercise["sets"]
-        ):
-            raise ValueError("planned set references no declared round")
     sequence: list[tuple[str, ...]] = []
     for number in range(1, rounds + 1):
         names = []
@@ -264,8 +260,6 @@ def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> li
                 if not name:
                     raise ValueError("exact exercise name is unavailable for plan preview")
                 names.append(name)
-        if not names:
-            raise ValueError("declared round contains no planned sets")
         sequence.append(tuple(names))
     lines = []
     start = 1
@@ -274,7 +268,8 @@ def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> li
             continue
         interval = f"{start}" if start == index else f"{start}–{index}"
         joiner = " → " if block["block_type_code"] == "circuit" else " + "
-        lines.append(f"  Круги {interval}: {joiner.join(sequence[start - 1])}.")
+        content = joiner.join(sequence[start - 1]) or "нет подходов — требуется исправление"
+        lines.append(f"  Круги {interval}: {content}.")
         start = index + 1
     return lines
 
@@ -345,16 +340,20 @@ def _exercise_sets(exercise: dict[str, Any], *, round_block: bool) -> list[str]:
         label = (
             f"подходы {positions[0]}–{positions[-1]}" if len(sets) > 1 else f"подход {positions[0]}"
         )
-        round_numbers = sorted(
-            {item["round_no"] for item in sets if item.get("round_no") is not None}
-        )
-        if round_block and round_numbers:
-            rounds_label = (
-                str(round_numbers[0])
-                if len(round_numbers) == 1
-                else ", ".join(map(str, round_numbers))
-            )
-            label = f"круги {rounds_label}, {label}"
+        if round_block:
+            counts: dict[int | None, int] = {}
+            for entry in entry_groups:
+                number = entry[0].get("round_no")
+                counts[number] = counts.get(number, 0) + 1
+            distribution = [
+                f"круг {number}: {_set_count(count)}"
+                for number, count in sorted(
+                    (number, count) for number, count in counts.items() if number is not None
+                )
+            ]
+            if None in counts:
+                distribution.append(f"без номера круга: {_set_count(counts[None])}")
+            label = f"{', '.join(distribution)}, {label}"
         count = f"{_set_count(len(entry_groups))} × " if len(entry_groups) > 1 else ""
         lines.append(
             f"    {label}: {count}{description}" + ("" if description.endswith(".") else ".")
@@ -370,10 +369,14 @@ def render_plan(
     detail_level: str = "full",
 ) -> str:
     plan = payload["plan"]
+    round_issues = plan_round_issues(plan)
     lines = [
         f"Сохранить план «{plan['name']}» на {date.fromisoformat(str(plan['planned_date'])).strftime('%d.%m.%Y')}?",
         "Не сохранён. Это план занятия, а не отчёт о выполнении.",
     ]
+    if round_issues:
+        lines.append("Требует исправления до подтверждения:")
+        lines.extend(f"• {issue['message_safe']}" for issue in round_issues)
     if plan.get("planned_time"):
         lines.append(f"Плановое время: {str(plan['planned_time'])[:5]}.")
     if plan.get("purpose"):
@@ -450,6 +453,9 @@ def render_plan(
         for link in recommendation.get("fact_links", []):
             lines.append(f"  Учитываемый факт: {link['reason']}")
     if detail_level in {"full", "short"}:
+        if round_issues:
+            lines.extend(["", "Исправь круги и запроси новый предпросмотр; подтвердить этот черновик нельзя."])
+            return "\n".join(lines)
         lines.extend(
             ["", "Сохранить план? Можно подтвердить, назвать изменения или попросить подробности."]
         )

@@ -6,7 +6,7 @@ from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from plan_flow import context, current_plan, post, show_and_confirm
+from plan_flow import context, current_plan, post, post_with_status, show_and_confirm
 from sqlalchemy import create_engine, text
 
 from trainer.domain.context import digest_payload
@@ -146,6 +146,57 @@ def run() -> None:
             }
         ],
     }
+    for index, round_numbers in enumerate(((None, 1), (1, 1)), 1):
+        invalid = deepcopy(plan)
+        invalid["context"] = context(f"invalid-superset-{index}")
+        block = invalid["plan"]["blocks"][0]
+        block["block_type_code"] = "superset"
+        block["declared_rounds"] = 2
+        block["exercises"] = block["exercises"][:1]
+        block["exercises"][0]["sets"] = deepcopy(second_sets)
+        for planned_set, number in zip(
+            block["exercises"][0]["sets"], round_numbers, strict=True
+        ):
+            planned_set["round_no"] = number
+        status, response = post_with_status(
+            "/api/v1/commands/plan-drafts", invalid, f"invalid-superset-{index}"
+        )
+        assert status == 400, response
+        errors = response["error"]["field_errors"]
+        assert any(error["path"].startswith("plan.blocks[0]") for error in errors)
+        assert any(error["code"] == "empty_round" for error in errors), response
+    distribution_texts = []
+    for index, round_numbers in enumerate(((1, 1, 2), (1, 2, 2)), 1):
+        candidate = deepcopy(plan)
+        candidate["context"] = context(f"round-distribution-{index}")
+        block = candidate["plan"]["blocks"][0]
+        block["block_type_code"] = "circuit"
+        block["declared_rounds"] = 2
+        block["exercises"] = [deepcopy(plan["plan"]["blocks"][0]["exercises"][1])]
+        block["exercises"][0]["position"] = 1
+        prototype = deepcopy(block["exercises"][0]["sets"][0])
+        block["exercises"][0]["sets"] = []
+        for position, number in enumerate(round_numbers, 1):
+            planned_set = deepcopy(prototype)
+            planned_set.update(position=position, logical_set_no=position, round_no=number)
+            block["exercises"][0]["sets"].append(planned_set)
+        candidate_draft = post(
+            "/api/v1/commands/plan-drafts", candidate, f"round-distribution-{index}"
+        )["data"]
+        candidate_preview = post(
+            "/api/v1/commands/previews",
+            {
+                "context": context(f"round-distribution-preview-{index}"),
+                "revision_id": candidate_draft["revision_id"],
+                "detail_level": "full",
+            },
+            f"round-distribution-preview-{index}",
+        )["data"]
+        assert candidate_preview["complete"] is True
+        distribution_texts.append(candidate_preview["canonical_text"])
+    assert "круг 1: 2 подхода, круг 2: 1 подход" in distribution_texts[0]
+    assert "круг 1: 1 подход, круг 2: 2 подхода" in distribution_texts[1]
+    assert distribution_texts[0] != distribution_texts[1]
     draft = post("/api/v1/commands/plan-drafts", plan, "compact-plan-draft")["data"]
     full = post(
         "/api/v1/commands/previews",
