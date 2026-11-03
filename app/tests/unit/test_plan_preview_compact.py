@@ -116,6 +116,30 @@ def test_legacy_total_mass_meaning_remains_readable() -> None:
     assert "total" not in text
 
 
+def test_legacy_program_design_recommendation_remains_readable() -> None:
+    item, names = exercise(1, "Вымышленный жим", [planned_set(1)])
+    payload = {
+        "plan": {
+            "name": "Вымышленный план",
+            "planned_date": "2030-01-02",
+            "temporary_conditions": {},
+            "blocks": [{"position": 1, "block_type_code": "straight", "exercises": [item]}],
+        },
+        "recommendations": [{
+            "recommendation_kind": "program_design",
+            "decision_text": "Проверить программу",
+            "short_explanation": "Вымышленное основание",
+            "confidence": "insufficient",
+            "assumptions": {},
+            "alternatives": {},
+            "revisit_condition": "после занятия",
+        }],
+    }
+    text = render_plan(payload, names)
+    assert "Построение программы: Проверить программу" in text
+    assert "program_design" not in text
+
+
 def test_six_exercises_with_repeated_sets_fit_compact_overview() -> None:
     exercises = []
     names = {}
@@ -158,6 +182,18 @@ def test_round_order_and_partial_participation_are_explicit() -> None:
     first["sets"][0]["round_no"] = 5
     with pytest.raises(ValueError, match="references no declared round"):
         preview([block], first_name | second_name)
+
+
+def test_legacy_circuit_without_explicit_circuit_positions_uses_exercise_order() -> None:
+    first, first_name = exercise(1, "Первое", [planned_set(1, round_no=1)])
+    second, second_name = exercise(2, "Второе", [planned_set(1, round_no=1)])
+    first.pop("circuit_position")
+    second.pop("circuit_position")
+    text = preview([{
+        "position": 1, "block_type_code": "circuit", "declared_rounds": 1,
+        "exercises": [first, second],
+    }], first_name | second_name)
+    assert "Круги 1: Первое → Второе" in text
 
 
 def test_sides_pair_only_with_equal_parameters_in_same_round() -> None:

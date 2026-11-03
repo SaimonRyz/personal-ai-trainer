@@ -243,7 +243,7 @@ def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> li
     ordered = sorted(
         block["exercises"], key=lambda item: item.get("circuit_position") or item["position"]
     )
-    positions = [exercise.get("circuit_position") for exercise in ordered]
+    positions = [exercise.get("circuit_position") or exercise["position"] for exercise in ordered]
     if any(not isinstance(position, int) or position < 1 for position in positions) or len(
         positions
     ) != len(set(positions)):
@@ -427,6 +427,7 @@ def render_plan(
         kind = {
             "plan_structure": "Структура занятия",
             "exercise_selection": "Выбор упражнения",
+            "program_design": "Построение программы",
         }.get(recommendation["recommendation_kind"])
         if kind is None:
             raise ValueError("recommendation kind has no supported user-facing label")
