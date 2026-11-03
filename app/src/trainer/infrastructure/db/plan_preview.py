@@ -108,20 +108,22 @@ def _load(load: dict[str, Any]) -> str:
         result = f"лента: {direction}"
     elif kind == "external":
         mass = load.get("mass")
+        count = load.get("item_count")
         if mass is None:
             result = "внешняя нагрузка не указана"
+            if count is not None:
+                result += f"; предметов: {_number(count)}"
         else:
             unit = {"kilogram": "кг", "pound": "фунтов"}.get(load.get("unit_code"))
             if unit is None:
                 raise ValueError("external load unit has no supported user-facing label")
             amount = f"{_number(mass)} {unit}"
             meaning = load.get("mass_meaning")
-            count = load.get("item_count")
             if meaning in {"total_external_mass", "total"}:
                 result = f"{amount} — общая внешняя нагрузка"
                 if count is not None:
                     result += f"; предметов: {_number(count)}"
-            elif meaning == "per_item_mass":
+            elif meaning in {"per_item_mass", "mass_per_item"}:
                 if count is None:
                     result = f"{amount} — масса одного предмета; количество не указано"
                 else:
@@ -155,7 +157,7 @@ def _load(load: dict[str, Any]) -> str:
             and characteristics.get("mass_per_item_kg") is not None
         ):
             catalog_mass = _number(characteristics["mass_per_item_kg"])
-            if load.get("mass_meaning") != "per_item_mass" or catalog_mass != _number(
+            if load.get("mass_meaning") not in {"per_item_mass", "mass_per_item"} or catalog_mass != _number(
                 load.get("mass")
             ):
                 result += f"; масса предмета по каталогу: {catalog_mass} кг"

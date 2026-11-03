@@ -116,6 +116,29 @@ def test_legacy_total_mass_meaning_remains_readable() -> None:
     assert "total" not in text
 
 
+def test_legacy_per_item_mass_meaning_remains_readable() -> None:
+    planned = planned_set(1, mass="12")
+    planned["loads"][0].update(item_count="2", mass_meaning="mass_per_item")
+    item, names = exercise(1, "Вымышленное упражнение", [planned])
+    text = preview([{"position": 1, "block_type_code": "straight", "exercises": [item]}], names)
+    assert "2 предмета по 12 кг" in text
+    assert "mass_per_item" not in text
+
+
+def test_unknown_external_mass_keeps_item_count_in_full_and_details() -> None:
+    planned = planned_set(1, mass=None)
+    planned["loads"] = [{
+        "position": 1, "load_kind": "external", "mass": None,
+        "item_count": "2", "unit_code": None, "mass_meaning": None,
+        "equipment_snapshot": {},
+    }]
+    item, names = exercise(1, "Вымышленное упражнение", [planned])
+    block = {"position": 1, "block_type_code": "straight", "exercises": [item]}
+    for level in ("full", "details"):
+        text = preview([block], names, detail_level=level)
+        assert "внешняя нагрузка не указана; предметов: 2" in text
+
+
 def test_legacy_program_design_recommendation_remains_readable() -> None:
     item, names = exercise(1, "Вымышленный жим", [planned_set(1)])
     payload = {

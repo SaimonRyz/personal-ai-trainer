@@ -59,8 +59,8 @@
       "sha256": "cd87fcff693c4cb9b0b76a5a2adf2b4ab8baaf01d36b9c85c9910eab8d48e3c1"
     },
     "app/PLAN_PREVIEW_CONTRACT.md": {
-      "size": 6181,
-      "sha256": "05e8e209096439bbbf630899b205a92ef2726fc8bc78e52dfd720e19b727ae92"
+      "size": 6405,
+      "sha256": "04ad88c7485c113c28d6231ffa2a79963bbc5d7cb85fa73e98f8608864935778"
     },
     "app/README.md": {
       "size": 1571,
@@ -483,8 +483,8 @@
       "sha256": "e922cd9a01e67b501a85809e6a1c4482760198fa4d91bef910fa7ee67a94ff15"
     },
     "app/src/trainer/infrastructure/db/plan_preview.py": {
-      "size": 25811,
-      "sha256": "ee09d782b16ec802cd1d86329b4f5a0fc27a3090eb24db27d5929398ba1195be"
+      "size": 25951,
+      "sha256": "21163bfdbe715423fe506431f4f4efdea301a394df521a000f7105e3506873f6"
     },
     "app/src/trainer/infrastructure/db/preview_numbers.py": {
       "size": 507,
@@ -787,8 +787,8 @@
       "sha256": "1707570a166dceb3e3a551542e9a1baf7ccfd29a075a51441f14abbe269f18ab"
     },
     "app/tests/integration/plan_preview_flow.py": {
-      "size": 10144,
-      "sha256": "2a003f3b4b169a491e359e3ba402bb14dd6e548877219f4fcd20df045cdaa077"
+      "size": 11373,
+      "sha256": "e83bf0d24a6f9946f5902fa1134046d90924b95c07ec0c7bf03423aff528b37a"
     },
     "app/tests/integration/profile_update_flow.py": {
       "size": 4585,
@@ -1059,8 +1059,8 @@
       "sha256": "27d718397908d603a04b650c0dc39108d151e0e0d468bace63fa12527da7f87e"
     },
     "app/tests/unit/test_plan_preview_compact.py": {
-      "size": 18740,
-      "sha256": "08479b9f25f538bcaac90aeb962f350d6a0c19211e0f3f97b66a0df6a440cab9"
+      "size": 19885,
+      "sha256": "0b68c2cba5c85d812e4025f5445a91f04d651fd565b800ab643c886eb4d7d334"
     },
     "app/tests/unit/test_planning_fact_digest.py": {
       "size": 1848,

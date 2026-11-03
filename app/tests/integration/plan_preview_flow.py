@@ -197,6 +197,31 @@ def run() -> None:
     assert "круг 1: 2 подхода, круг 2: 1 подход" in distribution_texts[0]
     assert "круг 1: 1 подход, круг 2: 2 подхода" in distribution_texts[1]
     assert distribution_texts[0] != distribution_texts[1]
+    for index, (mass, meaning, expected) in enumerate((
+        ("12", "mass_per_item", "2 предмета по 12 кг"),
+        (None, None, "внешняя нагрузка не указана; предметов: 2"),
+    ), 1):
+        candidate = deepcopy(plan)
+        candidate["context"] = context(f"load-preview-{index}")
+        candidate["plan"]["blocks"][0]["exercises"][0]["sets"][0]["loads"] = [{
+            "position": 1, "load_kind": "external", "mass": mass,
+            "item_count": "2", "unit_code": "kilogram" if mass else None,
+            "mass_meaning": meaning, "direction": None, "raw_ambiguous_text": None,
+        }]
+        load_draft = post(
+            "/api/v1/commands/plan-drafts", candidate, f"load-preview-{index}"
+        )["data"]
+        for level in ("full", "details"):
+            result = post(
+                "/api/v1/commands/previews",
+                {
+                    "context": context(f"load-preview-{index}-{level}"),
+                    "revision_id": load_draft["revision_id"],
+                    "detail_level": level,
+                },
+                f"load-preview-{index}-{level}",
+            )["data"]
+            assert expected in result["canonical_text"]
     draft = post("/api/v1/commands/plan-drafts", plan, "compact-plan-draft")["data"]
     full = post(
         "/api/v1/commands/previews",
