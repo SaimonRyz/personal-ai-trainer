@@ -235,7 +235,8 @@ class ConfirmationPreviewAudit(unittest.TestCase):
                    "context_snapshot": {"equipment_inventory_snapshot": [
                        {"name": "СЛУЖЕБНЫЙ ПРЕДМЕТ"}]}}
         text = render_plan(payload, {"synthetic-revision": "Вымышленное упражнение"})
-        self.assertEqual(text.count("Подход "), 3)
+        for position in (1, 2, 3):
+            self.assertIn(f"подход {position}:", text)
         self.assertIn("02.01.2030", text)
         self.assertNotIn("СЛУЖЕБНЫЙ ПРЕДМЕТ", text)
         self.assertNotIn("служебные ID", text)

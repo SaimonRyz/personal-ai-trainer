@@ -479,8 +479,8 @@
       "sha256": "e922cd9a01e67b501a85809e6a1c4482760198fa4d91bef910fa7ee67a94ff15"
     },
     "app/src/trainer/infrastructure/db/plan_preview.py": {
-      "size": 12126,
-      "sha256": "2a781d947fba3546c2f2dd8c1faf387057225d898eadad979e48d8e069ec6fa9"
+      "size": 14327,
+      "sha256": "1b016f0fe3581bd7f12c6e87e49119b2b0947e32630c32c9b85960fc5f6122f6"
     },
     "app/src/trainer/infrastructure/db/preview_numbers.py": {
       "size": 507,
@@ -975,8 +975,8 @@
       "sha256": "9feed47c7d9933a86f4a3716618ef6e664f51e02ca95680ce7d8434c8747e62f"
     },
     "app/tests/unit/test_confirmation_preview_audit.py": {
-      "size": 19892,
-      "sha256": "8bb23c066648286da50e372caa9a948c15c963330286c2b91cccde1441a02c08"
+      "size": 19931,
+      "sha256": "f7e8786d656bf88049576e005000b87d5f1a0a7a67cd2da2f867a362c37f8ebc"
     },
     "app/tests/unit/test_context_domain.py": {
       "size": 6704,
@@ -1055,8 +1055,8 @@
       "sha256": "8a72c302ff5ea11b2e03a82b72a33f8870a464c565949f3347179ca3dcb20ba3"
     },
     "app/tests/unit/test_preview_human_readable.py": {
-      "size": 39761,
-      "sha256": "d7b490f8f8482bc0e8cb1bc9b74aef446f5a9e0bb7c800a74ab04bf2694a4f37"
+      "size": 41056,
+      "sha256": "6f4c66c79810b307ef0961a97ce09dd188ed4bad3420d64535597ab5080986cc"
     },
     "app/tests/unit/test_preview_report_codes.py": {
       "size": 6870,

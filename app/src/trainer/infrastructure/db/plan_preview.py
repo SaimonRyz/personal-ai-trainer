@@ -33,6 +33,19 @@ def _metric(metric: dict[str, Any]) -> str:
     ]
     if not values:
         raise ValueError("planned metric has no value")
+    if metric.get("exact_value") is not None and len(values) == 1:
+        value = _number(metric["exact_value"])
+        if metric["metric_kind"] == "repetitions" and metric["unit_code"] == "repetition":
+            count = int(value) if value.isdecimal() else None
+            noun = "повторение" if count is not None and count % 10 == 1 and count % 100 != 11 else (
+                "повторения" if count is not None and count % 10 in {2, 3, 4} and count % 100 not in {12, 13, 14} else "повторений"
+            )
+            result = f"{value} {noun}"
+        else:
+            result = f"{value} {units.get(metric['unit_code'], metric['unit_code'])}"
+        if metric.get("custom_definition"):
+            result += f" (особое определение: {_details(metric['custom_definition'])})"
+        return result
     quantity = " ".join(f"{label} {_number(value)}" for label, value in values)
     unit = units.get(metric["unit_code"], metric["unit_code"])
     result = f"{names.get(metric['metric_kind'], metric['metric_kind'])}: {quantity} {unit}"
@@ -105,6 +118,81 @@ def _details(value: Any) -> str:
     return str(value)
 
 
+def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> list[str]:
+    if block["block_type_code"] == "straight":
+        return []
+    rounds = block.get("declared_rounds")
+    if not isinstance(rounds, int) or rounds < 1:
+        return []
+    ordered = sorted(block["exercises"], key=lambda item: item.get("circuit_position") or item["position"])
+    sequence: list[tuple[str, ...]] = []
+    for number in range(1, rounds + 1):
+        names = []
+        for exercise in ordered:
+            if any(item.get("round_no") == number for item in exercise["sets"]):
+                ref = exercise.get("exercise_ref") or {}
+                name = exercise_names.get(str(ref.get("revision_id")))
+                if not name:
+                    raise ValueError("exact exercise name is unavailable for plan preview")
+                names.append(name)
+        if not names:
+            sequence.append(("подходы не указаны",))
+            continue
+        sequence.append(tuple(names))
+    lines = []
+    start = 1
+    for index in range(1, rounds + 1):
+        if index < rounds and sequence[index] == sequence[start - 1]:
+            continue
+        interval = f"{start}" if start == index else f"{start}–{index}"
+        lines.append(f"  Круги {interval}: {' + '.join(sequence[start - 1])}.")
+        start = index + 1
+    return lines
+
+
+def _set_description(planned_set: dict[str, Any]) -> str:
+    parts = ["разминка"] if planned_set["set_type_code"] == "warmup" else []
+    parts.extend(_metric(metric) for metric in planned_set["metrics"])
+    parts.extend(_load(load) for load in planned_set.get("loads", []))
+    side = planned_set.get("side")
+    if side in {"left", "right"}:
+        parts.append({"left": "левая сторона", "right": "правая сторона"}[side])
+    for scale in (
+        _range("RPE", planned_set, "target_rpe_min", "target_rpe_max"),
+        _range("повторений в запасе", planned_set, "target_rir_min", "target_rir_max"),
+    ):
+        if scale:
+            parts.append(scale)
+    if planned_set.get("tempo"):
+        parts.append(f"темп {planned_set['tempo']}")
+    if planned_set.get("pause_seconds") is not None:
+        parts.append(f"пауза {_number(planned_set['pause_seconds'])} с")
+    if planned_set.get("rest_after_seconds") is not None:
+        parts.append(f"отдых {_number(planned_set['rest_after_seconds'])} с")
+    return "; ".join(parts)
+
+
+def _exercise_sets(exercise: dict[str, Any], *, round_block: bool) -> list[str]:
+    groups: list[tuple[str, list[dict[str, Any]]]] = []
+    for planned_set in sorted(exercise["sets"], key=lambda item: item["position"]):
+        description = _set_description(planned_set)
+        if groups and groups[-1][0] == description:
+            groups[-1][1].append(planned_set)
+        else:
+            groups.append((description, [planned_set]))
+    lines = []
+    for description, sets in groups:
+        positions = [item["position"] for item in sets]
+        label = f"подходы {positions[0]}–{positions[-1]}" if len(sets) > 1 else f"подход {positions[0]}"
+        round_numbers = sorted({item["round_no"] for item in sets if item.get("round_no") is not None})
+        if round_block and round_numbers:
+            rounds_label = str(round_numbers[0]) if len(round_numbers) == 1 else ", ".join(map(str, round_numbers))
+            label = f"круги {rounds_label}, {label}"
+        count = f"{len(sets)} × " if len(sets) > 1 else ""
+        lines.append(f"    {label}: {count}{description}" + ("" if description.endswith(".") else "."))
+    return lines
+
+
 def render_plan(
     payload: dict[str, Any], exercise_names: dict[str, str], *, place_name: str | None = None
 ) -> str:
@@ -118,16 +206,18 @@ def render_plan(
     if plan.get("purpose"):
         lines.append(f"Цель занятия: {plan['purpose']}")
     if plan.get("comment"):
-        lines.append(f"Комментарий: {plan['comment']}")
+        lines.append(f"Комментарий к плану (не отдельное упражнение): {plan['comment']}")
     if plan.get("program_id"):
         lines.append("План составлен по действующей программе.")
     lines.extend(_conditions(plan, place_name))
 
     for block in sorted(plan["blocks"], key=lambda item: item["position"]):
-        kind = {"straight": "обычный порядок", "superset": "суперсет", "circuit": "круговая последовательность"}.get(
+        kind = {"straight": "блок", "superset": "суперсет", "circuit": "круговой блок"}.get(
             block["block_type_code"], block["block_type_code"]
         )
-        heading = f"Блок {block['position']}: {block.get('name') or kind} ({kind})"
+        heading = f"{block['position']}. {block.get('name') or kind}"
+        if block.get("name") and block["block_type_code"] != "straight":
+            heading += f" ({kind})"
         if block.get("declared_rounds") is not None:
             heading += f"; кругов: {block['declared_rounds']}"
         if block.get("rest_seconds") is not None:
@@ -135,50 +225,17 @@ def render_plan(
         lines.append(heading + ".")
         if block.get("comment"):
             lines.append(f"  Комментарий к блоку: {block['comment']}")
+        lines.extend(_round_sequence(block, exercise_names))
         for exercise in sorted(block["exercises"], key=lambda item: item["position"]):
             ref = exercise.get("exercise_ref") or {}
             name = exercise_names.get(str(ref.get("revision_id")))
             if not name:
                 raise ValueError("exact exercise name is unavailable for plan preview")
-            label = f"  Упражнение {exercise['position']}: {name}"
-            if exercise.get("circuit_position") is not None:
-                label += f" (позиция в круге {exercise['circuit_position']})"
+            label = f"  {exercise['position']}. {name}"
             lines.append(label + ".")
             if exercise.get("comment"):
                 lines.append(f"    Комментарий: {exercise['comment']}")
-            requirements = (exercise.get("equipment_snapshot") or {}).get("requirements") or []
-            for requirement in requirements:
-                optionality = {
-                    "required": "обязательно", "optional": "необязательно",
-                    "alternative": "один из вариантов",
-                }.get(requirement["optionality"], requirement["optionality"])
-                lines.append(
-                    f"    Инвентарь: {_equipment(requirement['equipment_type'])} ({optionality})."
-                )
-            for planned_set in sorted(exercise["sets"], key=lambda item: item["position"]):
-                parts = [f"    Подход {planned_set['position']}"]
-                if planned_set.get("logical_set_no") != planned_set["position"]:
-                    parts.append(f"номер в упражнении {planned_set['logical_set_no']}")
-                if planned_set.get("round_no") is not None:
-                    parts.append(f"круг {planned_set['round_no']}")
-                parts.append("разминка" if planned_set["set_type_code"] == "warmup" else "рабочий")
-                if planned_set.get("side") in {"left", "right", "both"}:
-                    parts.append({"left": "левая сторона", "right": "правая сторона", "both": "обе стороны"}[planned_set["side"]])
-                parts.extend(_metric(metric) for metric in planned_set["metrics"])
-                parts.extend(_load(load) for load in planned_set.get("loads", []))
-                for scale in (
-                    _range("RPE", planned_set, "target_rpe_min", "target_rpe_max"),
-                    _range("повторений в запасе", planned_set, "target_rir_min", "target_rir_max"),
-                ):
-                    if scale:
-                        parts.append(scale)
-                if planned_set.get("tempo"):
-                    parts.append(f"темп {planned_set['tempo']}")
-                if planned_set.get("pause_seconds") is not None:
-                    parts.append(f"пауза {_number(planned_set['pause_seconds'])} с")
-                if planned_set.get("rest_after_seconds") is not None:
-                    parts.append(f"отдых после подхода {planned_set['rest_after_seconds']} с")
-                lines.append("; ".join(parts) + ".")
+            lines.extend(_exercise_sets(exercise, round_block=block["block_type_code"] != "straight"))
 
     for index, recommendation in enumerate(payload["recommendations"], start=1):
         kinds = {"plan_structure": "структура занятия", "exercise_selection": "выбор упражнения"}
