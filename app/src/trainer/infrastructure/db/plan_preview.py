@@ -6,7 +6,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from trainer.domain.plan import plan_round_issues, recommendation_value_issues
+from trainer.domain.plan import (
+    MAX_PLAN_ROUNDS,
+    plan_round_issues,
+    recommendation_value_issues,
+)
 
 
 def _number(value: Any) -> str:
@@ -257,6 +261,8 @@ def _round_sequence(block: dict[str, Any], exercise_names: dict[str, str]) -> li
     rounds = block.get("declared_rounds")
     if not isinstance(rounds, int) or rounds < 1:
         return ["  Число кругов не задано — требуется исправление."]
+    if rounds > MAX_PLAN_ROUNDS:
+        return [f"  Задано {rounds} кругов; максимум {MAX_PLAN_ROUNDS} — требуется исправление."]
     ordered = sorted(
         block["exercises"], key=lambda item: item.get("circuit_position") or item["position"]
     )

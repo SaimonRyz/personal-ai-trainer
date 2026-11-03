@@ -165,6 +165,18 @@ def run() -> None:
         errors = response["error"]["field_errors"]
         assert any(error["path"].startswith("plan.blocks[0]") for error in errors)
         assert any(error["code"] == "empty_round" for error in errors), response
+    excessive = deepcopy(plan)
+    excessive["context"] = context("excessive-round-count")
+    excessive["plan"]["blocks"][0]["declared_rounds"] = 10_001
+    excessive["request_digest"] = "0" * 64
+    status, response = post_with_status(
+        "/api/v1/commands/plan-drafts", excessive, "excessive-round-count", normalize=False
+    )
+    assert status == 400, response
+    assert any(
+        error["path"] == "plan.blocks[0].declared_rounds"
+        for error in response["error"]["field_errors"]
+    ), response
     distribution_texts = []
     for index, round_numbers in enumerate(((1, 1, 2), (1, 2, 2)), 1):
         candidate = deepcopy(plan)

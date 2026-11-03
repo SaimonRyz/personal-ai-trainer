@@ -6,7 +6,12 @@ from uuid import uuid4
 import pytest
 
 from trainer.domain.context import DomainValidationError
-from trainer.domain.plan import validate_plan_draft
+from trainer.domain.plan import (
+    MAX_PLAN_ROUNDS,
+    MAX_ROUND_ISSUES,
+    plan_round_issues,
+    validate_plan_draft,
+)
 
 
 def valid_payload() -> dict[str, object]:
@@ -98,6 +103,43 @@ def test_superset_rejects_missing_or_empty_round_with_field_path(
     assert any(item["code"] == "empty_round" for item in errors)
     if round_numbers[0] is None:
         assert any(item["code"] == "invalid_round_no" for item in errors)
+
+
+def test_excessive_round_count_stops_before_set_and_empty_round_checks() -> None:
+    payload = valid_payload()
+    block = payload["plan"]["blocks"][0]  # type: ignore[index]
+    block["block_type_code"] = "superset"
+    block["declared_rounds"] = 10_001
+    block["exercises"][0]["sets"][0]["round_no"] = None
+    issues = plan_round_issues(payload["plan"])
+    assert len(issues) == 1
+    assert issues[0]["code"] == "too_many_rounds"
+    assert issues[0]["path"] == "plan.blocks[0].declared_rounds"
+    assert str(MAX_PLAN_ROUNDS) in issues[0]["message_safe"]
+    with pytest.raises(DomainValidationError) as caught:
+        validate_plan_draft(payload)
+    assert caught.value.field_errors == issues
+
+
+def test_many_disjoint_empty_rounds_have_bounded_diagnostics() -> None:
+    payload = valid_payload()
+    block = payload["plan"]["blocks"][0]  # type: ignore[index]
+    block["block_type_code"] = "circuit"
+    block["declared_rounds"] = MAX_PLAN_ROUNDS
+    block["exercises"][0]["sets"][0]["round_no"] = 1
+    issues = plan_round_issues(payload["plan"])
+    assert len(issues) == 1
+    assert issues[0]["code"] == "empty_round"
+    assert "2–100" in issues[0]["message_safe"]
+    prototype = block["exercises"][0]["sets"][0]
+    block["exercises"][0]["sets"] = []
+    for position, number in enumerate(range(1, MAX_PLAN_ROUNDS, 2), 1):
+        planned_set = deepcopy(prototype)
+        planned_set.update(position=position, logical_set_no=position, round_no=number)
+        block["exercises"][0]["sets"].append(planned_set)
+    issues = plan_round_issues(payload["plan"])
+    assert len(issues) == MAX_ROUND_ISSUES + 1
+    assert issues[-1]["code"] == "additional_round_issues"
 
 
 @pytest.mark.parametrize("field", ["assumptions", "alternatives"])

@@ -89,9 +89,9 @@ def post(
 
 
 def post_with_status(
-    path: str, body: dict[str, Any], key: str | None = None
+    path: str, body: dict[str, Any], key: str | None = None, *, normalize: bool = True
 ) -> tuple[int, dict[str, Any]]:
-    if key is not None:
+    if key is not None and normalize:
         model = (
             ConfirmRequest
             if path.endswith("/confirm")

@@ -723,7 +723,7 @@ class PlanBlockInput(ClosedModel):
     position: int = Field(ge=1)
     block_type_code: Literal["straight", "superset", "circuit"]
     name: str | None = None
-    declared_rounds: int | None = Field(default=None, ge=1)
+    declared_rounds: int | None = Field(default=None, ge=1, le=100)
     rest_seconds: int | None = Field(default=None, ge=0)
     comment: str | None = None
     exercises: list[PlanExerciseInput] = Field(min_length=1, max_length=100)

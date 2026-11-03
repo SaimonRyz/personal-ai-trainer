@@ -278,6 +278,17 @@ def test_legacy_superset_round_gaps_are_visible_but_not_offered_for_confirmation
     assert "Сохранить план?" not in text
 
 
+def test_legacy_excessive_round_count_is_bounded_and_nonconfirmable() -> None:
+    item, names = exercise(1, "Вымышленное упражнение", [planned_set(1, round_no=1)])
+    text = preview([{
+        "position": 1, "block_type_code": "superset", "declared_rounds": 10_001,
+        "exercises": [item],
+    }], names)
+    assert "максимум 100 кругов" in text
+    assert "подтвердить этот черновик нельзя" in text
+    assert len(text) < 1_000
+
+
 def test_legacy_circuit_without_explicit_circuit_positions_uses_exercise_order() -> None:
     first, first_name = exercise(1, "Первое", [planned_set(1, round_no=1)])
     second, second_name = exercise(2, "Второе", [planned_set(1, round_no=1)])
@@ -458,6 +469,40 @@ def test_plan_details_preview_uses_same_revision_and_is_not_confirmable() -> Non
             key="synthetic-shown",
             correlation_id=uuid4(),
         )
+
+
+def test_legacy_large_round_preview_is_marked_incomplete() -> None:
+    revision = uuid4()
+    item, names = exercise(1, "Вымышленное упражнение", [planned_set(1, round_no=1)])
+    canonical_payload = {
+        "plan": {"name": "Вымышленный план", "planned_date": "2030-01-02",
+                 "temporary_conditions": {}, "blocks": [{"position": 1,
+                 "block_type_code": "circuit", "declared_rounds": 10_001,
+                 "exercises": [item]}]},
+        "change_plan": [], "gaps": [], "recommendations": [],
+    }
+    draft_result = Mock()
+    draft_result.mappings.return_value.one_or_none.return_value = {
+        "draft_revision_id": revision, "typed_payload": canonical_payload,
+        "confirmation_kind": "normal", "intent_type": "plan", "state": "open",
+        "expires_at": datetime.now(UTC) + timedelta(hours=1),
+    }
+    dependencies = Mock()
+    dependencies.mappings.return_value = []
+    session = Mock()
+    session.execute.side_effect = [draft_result, dependencies, Mock()]
+    repo = ContextRepository(session)
+    repo._reserve = Mock(return_value=(uuid4(), None))
+    repo._finish = Mock()
+    repo._audit = Mock()
+    repo._render_plan_preview = Mock(return_value=render_plan(canonical_payload, names))
+    result = repo.create_preview(
+        payload={"request_digest": "a" * 64, "revision_id": str(revision),
+                 "detail_level": "full", "context": {"conversation_id": "synthetic"}},
+        key="large-round-preview", correlation_id=uuid4(),
+    )
+    assert result["complete"] is False
+    assert "максимум 100 кругов" in result["canonical_text"]
 
 
 def test_changed_plan_renderer_makes_old_full_preview_stale() -> None:

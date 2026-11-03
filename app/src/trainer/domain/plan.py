@@ -11,6 +11,8 @@ RECOMMENDATION_VALUE_KEYS = frozenset({
     "synthetic", "synthetic_gate", "assumption", "description",
     "rest_seconds", "duration_minutes", "spotter_available",
 })
+MAX_PLAN_ROUNDS = 100
+MAX_ROUND_ISSUES = 20
 
 
 def validate_plan_draft(payload: dict[str, Any]) -> None:
@@ -92,14 +94,40 @@ def recommendation_value_issues(
 def plan_round_issues(plan: dict[str, Any]) -> list[dict[str, str]]:
     """Find ambiguous round assignments without changing legacy draft data."""
     issues: list[dict[str, str]] = []
+
+    def record(issue: dict[str, str]) -> bool:
+        issues.append(issue)
+        if len(issues) >= MAX_ROUND_ISSUES:
+            issues.append({
+                "path": "plan.blocks",
+                "code": "additional_round_issues",
+                "message_safe": (
+                    "Показаны первые 20 ошибок кругов; исправьте их и проверьте план снова."
+                ),
+            })
+            return True
+        return False
+
     for block_index, block in enumerate(plan.get("blocks") or []):
         if block.get("block_type_code") not in {"circuit", "superset"}:
             continue
         path = f"plan.blocks[{block_index}]"
         rounds = block.get("declared_rounds")
         if not isinstance(rounds, int) or rounds < 1:
-            issues.append({"path": f"{path}.declared_rounds", "code": "missing_round_count",
-                           "message_safe": "Укажите число кругов блока."})
+            if record({"path": f"{path}.declared_rounds", "code": "missing_round_count",
+                       "message_safe": "Укажите число кругов блока."}):
+                return issues
+            continue
+        if rounds > MAX_PLAN_ROUNDS:
+            if record({
+                "path": f"{path}.declared_rounds",
+                "code": "too_many_rounds",
+                "message_safe": (
+                    f"Блок {block_index + 1}: максимум {MAX_PLAN_ROUNDS} кругов; "
+                    f"задано {rounds}."
+                ),
+            }):
+                return issues
             continue
         occupied: set[int] = set()
         for exercise_index, exercise in enumerate(block.get("exercises") or []):
@@ -107,26 +135,38 @@ def plan_round_issues(plan: dict[str, Any]) -> list[dict[str, str]]:
                 number = planned_set.get("round_no")
                 set_path = f"{path}.exercises[{exercise_index}].sets[{set_index}].round_no"
                 if not isinstance(number, int) or not 1 <= number <= rounds:
-                    issues.append({
+                    if record({
                         "path": set_path,
                         "code": "invalid_round_no",
                         "message_safe": (
                             f"Блок {block_index + 1}, упражнение {exercise_index + 1}, "
                             f"подход {set_index + 1}: укажите круг от 1 до {rounds}."
                         ),
-                    })
+                    }):
+                        return issues
                 else:
                     occupied.add(number)
-        for number in range(1, rounds + 1):
-            if number not in occupied:
-                issues.append({
+        missing = [number for number in range(1, rounds + 1) if number not in occupied]
+        if missing:
+            intervals: list[tuple[int, int]] = []
+            start = previous = missing[0]
+            for number in missing[1:]:
+                if number != previous + 1:
+                    intervals.append((start, previous))
+                    start = number
+                previous = number
+            intervals.append((start, previous))
+            for start, end in intervals:
+                label = str(start) if start == end else f"{start}–{end}"
+                if record({
                     "path": f"{path}.declared_rounds",
                     "code": "empty_round",
                     "message_safe": (
-                        f"Блок {block_index + 1}: в круге {number} нет подходов; "
+                        f"Блок {block_index + 1}: в круге {label} нет подходов; "
                         "добавьте их или уменьшите число кругов."
                     ),
-                })
+                }):
+                    return issues
     return issues
 
 
