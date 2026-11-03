@@ -58,12 +58,15 @@ def test_migration_manifest_is_ordered_and_checksums_are_canonical() -> None:
 
 def test_pending_migrations_continue_after_active_revision() -> None:
     assert pending_migrations("0003_schema_hardening") == MIGRATIONS[3:]
+    assert pending_migrations(("0030_plan_recommendation_kinds", "0030_program_schedule")) == (MIGRATIONS[-1],)
     assert pending_migrations(MIGRATIONS[-1].revision) == ()
 
 
 def test_unknown_revision_is_fail_closed() -> None:
     with pytest.raises(SchemaCompatibilityError, match="unknown active schema revision"):
         pending_migrations("not-approved")
+    with pytest.raises(SchemaCompatibilityError, match="unknown active schema revisions"):
+        pending_migrations(("0029_profile_update", "0030_program_schedule"))
 
 
 def test_changed_migration_file_is_fail_closed(tmp_path: Path) -> None:

@@ -471,8 +471,8 @@
       "sha256": "120c56be596b712fee667de79ae6ab9a26d2421858316633cab0a168690ef102"
     },
     "app/src/trainer/infrastructure/db/migrator.py": {
-      "size": 15164,
-      "sha256": "7535a63be0ed379384bf2fd4618be0d66e9afcff41c6f2c64dd902e019ba59c9"
+      "size": 16385,
+      "sha256": "3e128666372d6d2147ee9a3723ddb8b0cda23337a04875675d74babc6eb94028"
     },
     "app/src/trainer/infrastructure/db/operations.py": {
       "size": 3326,
@@ -733,6 +733,10 @@
     "app/tests/integration/measurement_flow.py": {
       "size": 12847,
       "sha256": "c931a67d3a6c270f4d4854e6f18a28cf8e7f77ccd8d6f4916f85d93002114569"
+    },
+    "app/tests/integration/migration_branch_recovery.py": {
+      "size": 2538,
+      "sha256": "5588e9c2c0b5e93536bb169053a99ba7ccf669d90594427882459dc8da772145"
     },
     "app/tests/integration/migration_dg03_r02.py": {
       "size": 7700,
@@ -1039,8 +1043,8 @@
       "sha256": "62ef6e1a6a09f6e18b1f66fd112913a2e865272b7cac9dc31ac3c2de670d4f51"
     },
     "app/tests/unit/test_migrator.py": {
-      "size": 2768,
-      "sha256": "75d289fdb74ef32d80d8d9367ec2aaa258f930e755f883a186ab095575d6d39d"
+      "size": 3048,
+      "sha256": "48edf2dc97386455004f4c70b3cc15bf19d40c7328d76908ab3555acad6f4ef4"
     },
     "app/tests/unit/test_plan_domain.py": {
       "size": 6152,

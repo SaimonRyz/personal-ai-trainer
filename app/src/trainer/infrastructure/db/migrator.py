@@ -233,24 +233,32 @@ def table_exists(connection: psycopg.Connection[tuple[object, ...]], qualified_n
         return bool(row and row[0])
 
 
+def current_revisions(
+    connection: psycopg.Connection[tuple[object, ...]],
+) -> tuple[str, ...]:
+    if not table_exists(connection, "trainer.alembic_version"):
+        return ()
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT version_num FROM trainer.alembic_version ORDER BY version_num")
+        return tuple(str(row[0]) for row in cursor.fetchall())
+
+
 def current_revision(
     connection: psycopg.Connection[tuple[object, ...]],
 ) -> str | None:
-    if not table_exists(connection, "trainer.alembic_version"):
-        return None
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT version_num FROM trainer.alembic_version")
-        row = cursor.fetchone()
-        return str(row[0]) if row else None
+    revisions = current_revisions(connection)
+    if len(revisions) > 1:
+        raise SchemaCompatibilityError("multiple active schema revisions")
+    return revisions[0] if revisions else None
 
 
 def validate_ledger(connection: psycopg.Connection[tuple[object, ...]]) -> None:
-    revision = current_revision(connection)
-    if revision is None:
+    revisions = current_revisions(connection)
+    if not revisions:
         return
     expected = {item.revision: item.checksum for item in MIGRATIONS}
-    if revision not in expected:
-        raise SchemaCompatibilityError(f"unknown active schema revision: {revision}")
+    if any(revision not in expected for revision in revisions):
+        raise SchemaCompatibilityError(f"unknown active schema revision: {revisions}")
     if not table_exists(connection, "trainer.schema_migrations"):
         raise SchemaCompatibilityError("schema_migrations ledger is missing")
     with connection.cursor() as cursor:
@@ -258,14 +266,26 @@ def validate_ledger(connection: psycopg.Connection[tuple[object, ...]]) -> None:
             "SELECT migration_id,checksum FROM trainer.schema_migrations ORDER BY migration_id"
         )
         rows = [(str(row[0]), str(row[1])) for row in cursor.fetchall()]
-    revision_index = next(
-        index for index, item in enumerate(MIGRATIONS) if item.revision == revision
-    )
-    if revision in {"0030_plan_recommendation_kinds", "0030_program_schedule"}:
-        base_end = next(index for index, item in enumerate(MIGRATIONS) if item.revision == "0029_profile_update")
-        selected = [*MIGRATIONS[:base_end + 1], next(item for item in MIGRATIONS if item.revision == revision)]
-    else:
+    branches = {"0030_plan_recommendation_kinds", "0030_program_schedule"}
+    if len(revisions) == 2 and set(revisions) == branches:
+        active_branches = branches
+    elif len(revisions) == 1 and revisions[0] in branches:
+        active_branches = {revisions[0]}
+    elif len(revisions) == 1:
+        revision_index = next(index for index, item in enumerate(MIGRATIONS) if item.revision == revisions[0])
         selected = MIGRATIONS[: revision_index + 1]
+        active_branches = set()
+    else:
+        raise SchemaCompatibilityError(f"unsupported active schema revisions: {revisions}")
+    if active_branches:
+        base_end = next(
+            index for index, item in enumerate(MIGRATIONS)
+            if item.revision == "0029_profile_update"
+        )
+        selected = [
+            *MIGRATIONS[:base_end + 1],
+            *(item for item in MIGRATIONS if item.revision in active_branches),
+        ]
     expected_rows = sorted((item.revision, item.checksum) for item in selected)
     if rows != expected_rows:
         raise SchemaCompatibilityError("migration ledger revision/checksum mismatch")
@@ -338,7 +358,18 @@ def record_attempt(
     connection.commit()
 
 
-def pending_migrations(revision: str | None) -> tuple[MigrationSpec, ...]:
+def pending_migrations(revision: str | tuple[str, ...] | None) -> tuple[MigrationSpec, ...]:
+    if isinstance(revision, tuple):
+        if len(revision) == 2 and set(revision) == {
+            "0030_plan_recommendation_kinds", "0030_program_schedule"
+        }:
+            return (MIGRATIONS[-1],)
+        if len(revision) == 1:
+            revision = revision[0]
+        elif not revision:
+            revision = None
+        else:
+            raise SchemaCompatibilityError(f"unknown active schema revisions: {revision}")
     if revision is None:
         return MIGRATIONS
     for index, migration in enumerate(MIGRATIONS):
@@ -356,7 +387,7 @@ def migrate_to_head() -> None:
             mark_interrupted_attempts(connection)
             validate_ledger(connection)
             validate_no_unfinished_operations(connection)
-            for migration in pending_migrations(current_revision(connection)):
+            for migration in pending_migrations(current_revisions(connection)):
                 if migration.revision in {"0030_plan_recommendation_kinds", "0030_program_schedule"}:
                     # Alembic applies the missing branch(es) while upgrading to the merge revision.
                     continue
