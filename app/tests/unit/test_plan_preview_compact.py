@@ -107,6 +107,15 @@ def test_four_identical_sets_compress_but_changed_load_and_warmup_do_not() -> No
     assert "подход 4: 3 повторения; 65 кг" in text
 
 
+def test_legacy_total_mass_meaning_remains_readable() -> None:
+    planned = planned_set(1)
+    planned["loads"][0]["mass_meaning"] = "total"
+    item, names = exercise(1, "Вымышленный жим", [planned])
+    text = preview([{"position": 1, "block_type_code": "straight", "exercises": [item]}], names)
+    assert "72 кг — общая внешняя нагрузка" in text
+    assert "total" not in text
+
+
 def test_six_exercises_with_repeated_sets_fit_compact_overview() -> None:
     exercises = []
     names = {}

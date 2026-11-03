@@ -483,8 +483,8 @@
       "sha256": "e922cd9a01e67b501a85809e6a1c4482760198fa4d91bef910fa7ee67a94ff15"
     },
     "app/src/trainer/infrastructure/db/plan_preview.py": {
-      "size": 24976,
-      "sha256": "073a2b12e235bd1864684a7ecdba07bae123f8f388e20c6f1baab325865b80cf"
+      "size": 24987,
+      "sha256": "40da6703ac672ec38f3cdfc8513a616a09bb69ff25d3a18fbadd01e1bde25570"
     },
     "app/src/trainer/infrastructure/db/preview_numbers.py": {
       "size": 507,
@@ -1059,8 +1059,8 @@
       "sha256": "76220ed8a230f3ca3996fdda71fbf5cd93c4fb96f7a5e81af1e1c9d404b236e5"
     },
     "app/tests/unit/test_plan_preview_compact.py": {
-      "size": 15258,
-      "sha256": "cdd886b1802bc2ae236d8b88d54d8df56555812eb58a59c66af2e86e67ea0f68"
+      "size": 15680,
+      "sha256": "86c27c85783eb3692a8e5fbf184834db896ec89425c1cfc02a86fe873e882f2d"
     },
     "app/tests/unit/test_planning_fact_digest.py": {
       "size": 1848,

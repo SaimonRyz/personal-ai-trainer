@@ -115,7 +115,7 @@ def _load(load: dict[str, Any]) -> str:
             amount = f"{_number(mass)} {unit}"
             meaning = load.get("mass_meaning")
             count = load.get("item_count")
-            if meaning == "total_external_mass":
+            if meaning in {"total_external_mass", "total"}:
                 result = f"{amount} — общая внешняя нагрузка"
                 if count is not None:
                     result += f"; предметов: {_number(count)}"
