@@ -75,7 +75,7 @@ def main() -> None:
         """), {"id": status_id, "version": knowledge_version, "protocol": protocol_id})
     start = datetime.now(UTC).date()
     end = start + timedelta(days=30)
-    stage_end = start + timedelta(days=4)
+    stage_end = start + timedelta(days=18)
     exercise_ref = {"object_type": "exercise", "object_id": str(exercise["exercise_id"]),
                     "revision_id": str(exercise["current_revision_id"])}
     sets = [{"position": number, "logical_set_no": number, "side": "both",
@@ -132,6 +132,7 @@ def main() -> None:
         preview_count = db.execute(text("SELECT count(*) FROM trainer.previews")).scalar_one()
     for section, selector in (("day", {"day_position": 1}),
                               ("week", {"week_start": start.isoformat()}),
+                              ("week", {"week_start": (start + timedelta(days=7)).isoformat()}),
                               ("basis", {})):
         detail = post("/api/v1/queries/program-draft-detail", {
             "context": context("ux-detail-" + section),
@@ -140,6 +141,9 @@ def main() -> None:
         assert detail["revision_id"] == publication["revision_id"]
         assert detail["canonical_text"]
         assert "preview_id" not in detail
+        if section == "week":
+            assert selector["week_start"] in detail["canonical_text"]
+            assert "При усталости уменьшить объём" in detail["canonical_text"]
     with engine.connect() as db:
         assert db.execute(text("SELECT count(*) FROM trainer.previews")).scalar_one() == preview_count
     committed = post(f"/api/v1/commands/previews/{shown['preview_id']}/confirm",

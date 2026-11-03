@@ -109,6 +109,23 @@ class ConfirmationPreviewAudit(unittest.TestCase):
         self.assertIn("Подход 1", week)
         self.assertNotIn("preview_id", week)
 
+    def test_program_week_inside_multiweek_stage(self) -> None:
+        payload = _program(1, 0)
+        payload["publication_source"]["version"]["cycle_stages"] = [{
+            "starts_on": "2030-01-01", "ends_on": "2030-01-21",
+            "title": "Трёхнедельный этап", "description": "Сохранять объём",
+            "day_rules": [{"day_position": 1, "description": "При усталости снизить нагрузку"}],
+        }]
+        names = {"synthetic-revision": "Вымышленное упражнение"}
+        second_week = render_program(payload, goal={"name": "Вымышленная цель"}, names=names,
+                                     detail_level="program_week", week_start="2030-01-08")
+        self.assertIn("Неделя с 2030-01-08", second_week)
+        self.assertIn("Трёхнедельный этап", second_week)
+        self.assertIn("При усталости снизить нагрузку", second_week)
+        with self.assertRaisesRegex(ValueError, "нет этапа"):
+            render_program(payload, goal={"name": "Вымышленная цель"}, names=names,
+                           detail_level="program_week", week_start="2030-01-22")
+
     def test_program_numbers_preserve_significant_precision(self) -> None:
         self.assertEqual(_number("100.000000"), "100")
         self.assertEqual(_number("2.500000"), "2,5")

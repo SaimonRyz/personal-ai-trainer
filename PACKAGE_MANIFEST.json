@@ -487,8 +487,8 @@
       "sha256": "5e377e3251eed532367256621a7caf9a7189e4d5d135a35caaadca3926e36559"
     },
     "app/src/trainer/infrastructure/db/program_publication_preview.py": {
-      "size": 19419,
-      "sha256": "abeae7f7609597b75b362d264d75b094543eed7c9e1a54deee7f4ed136cacb05"
+      "size": 19661,
+      "sha256": "635a8b3a005274b8d19f79721483be636b153363c78abba6d5777dea7bb75597"
     },
     "app/src/trainer/infrastructure/db/progress.py": {
       "size": 63925,
@@ -787,8 +787,8 @@
       "sha256": "81a3508d03609bf056bd2151173999d5909c55714d33c855a58987df7fe47db5"
     },
     "app/tests/integration/program_preview_ux_flow.py": {
-      "size": 13149,
-      "sha256": "4287967ecd3661ee1fd9edc2f0c881fc514818b909f0634e93430358f062a139"
+      "size": 13452,
+      "sha256": "27946ed78d77f3d962413e332d6e23e32da233df06c006e4c23f6ab3f56842a3"
     },
     "app/tests/integration/program_schedule_upgrade.py": {
       "size": 1234,
@@ -971,8 +971,8 @@
       "sha256": "9feed47c7d9933a86f4a3716618ef6e664f51e02ca95680ce7d8434c8747e62f"
     },
     "app/tests/unit/test_confirmation_preview_audit.py": {
-      "size": 18646,
-      "sha256": "9c698b4e74cc3a2335effb98df33ef610278ceec1c17fc8eb1a7f3d7b8e5a8a6"
+      "size": 19892,
+      "sha256": "8bb23c066648286da50e372caa9a948c15c963330286c2b91cccde1441a02c08"
     },
     "app/tests/unit/test_context_domain.py": {
       "size": 6704,

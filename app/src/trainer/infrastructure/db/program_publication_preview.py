@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import date
 from decimal import Decimal
 from typing import Any
 
@@ -243,12 +244,15 @@ def render(
     if detail_level == "program_week":
         if week_start is None:
             raise ValueError("Укажи дату начала недели.")
+        selected_date = date.fromisoformat(str(week_start))
         stages = [stage for stage in version.get("cycle_stages", [])
-                  if stage["starts_on"] == week_start]
+                  if date.fromisoformat(str(stage["starts_on"])) <= selected_date
+                  <= date.fromisoformat(str(stage["ends_on"]))]
         if len(stages) != 1:
             raise ValueError("Для этой даты нет этапа цикла в данной редакции.")
         stage = stages[0]
-        lines = [f"Этап {stage['starts_on']} — {stage['ends_on']}: {stage['title']}", stage["description"]]
+        lines = [f"Неделя с {selected_date.isoformat()} — этап {stage['starts_on']} — {stage['ends_on']}: {stage['title']}",
+                 stage["description"]]
         for day in templates:
             lines.extend(_day_lines(day, names, details=True))
             for rule in stage.get("day_rules", []):
