@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import unittest
 
+from trainer.domain.context import DomainValidationError
+from trainer.domain.program import validate_program_draft
 from trainer.infrastructure.db.context_repository import ContextRepository
-from trainer.infrastructure.db.program_publication_preview import render as render_program
+from trainer.infrastructure.db.program_publication_preview import (
+    ProgramScheduleConflict, _number, render as render_program,
+)
 from trainer.infrastructure.db.plan_preview import render_plan
 from trainer.infrastructure.db.measurement_preview import render as render_measurement
 from trainer.infrastructure.db.record_preview import render_historical, render_decision
@@ -49,6 +53,86 @@ def _program(days: int = 3, inventory: int = 25) -> dict:
 
 
 class ConfirmationPreviewAudit(unittest.TestCase):
+    def test_program_compacts_identical_sets_without_losing_differences(self) -> None:
+        payload = _program(1, 0)
+        day = payload["publication_source"]["version"]["templates"][0]
+        day["weekday_code"] = "tuesday"
+        day["purpose"] = "Вторник — вымышленная тренировка"
+        sets = day["blocks"][0]["exercises"][0]["sets"]
+        for item in sets:
+            item["metrics"][0]["exact_value"] = "3.000000"
+        sets[1]["metrics"][0]["exact_value"] = "3"
+        text = render_program(payload, goal={"name": "Вымышленная цель"},
+                              names={"synthetic-revision": "Вымышленное упражнение"})
+        self.assertIn("Вторник: вымышленная тренировка", text)
+        self.assertIn("Вымышленное упражнение — 3 × 3 повтора", text)
+        self.assertNotIn("3.000000", text)
+        sets[2]["metrics"][0]["exact_value"] = "4.000000"
+        changed = render_program(payload, goal={"name": "Вымышленная цель"},
+                                 names={"synthetic-revision": "Вымышленное упражнение"})
+        self.assertIn("2 × 3 повтора; Подход 3: 4 повтора", changed)
+
+    def test_program_rejects_prose_weekday_without_structured_schedule(self) -> None:
+        payload = _program(1, 0)
+        payload["publication_source"]["version"]["rationale"] = "Расписание: вторник. Постепенный рост."
+        with self.assertRaisesRegex(ProgramScheduleConflict, "Уточни расписание"):
+            render_program(payload, goal={"name": "Вымышленная цель"},
+                           names={"synthetic-revision": "Вымышленное упражнение"})
+
+    def test_program_keeps_schedule_caveat_from_prose(self) -> None:
+        payload = _program(1, 0)
+        version = payload["publication_source"]["version"]
+        version["templates"][0]["weekday_code"] = "tuesday"
+        version["rationale"] = "Расписание: вторник после другой нагрузки. Уменьшить объём при усталости."
+        text = render_program(payload, goal={"name": "Вымышленная цель"},
+                              names={"synthetic-revision": "Вымышленное упражнение"})
+        self.assertIn("после другой нагрузки", text)
+
+    def test_program_stage_and_week_details_use_same_revision_data(self) -> None:
+        payload = _program(1, 0)
+        version = payload["publication_source"]["version"]
+        version["cycle_stages"] = [{
+            "starts_on": "2030-01-01", "ends_on": "2030-01-05",
+            "title": "Первая неделя", "description": "Вымышленный начальный объём",
+            "day_rules": [{"day_position": 1, "description": "Уменьшить объём при усталости"}],
+        }]
+        names = {"synthetic-revision": "Вымышленное упражнение"}
+        overview = render_program(payload, goal={"name": "Вымышленная цель"}, names=names)
+        week = render_program(payload, goal={"name": "Вымышленная цель"}, names=names,
+                              detail_level="program_week", week_start="2030-01-01")
+        day = render_program(payload, goal={"name": "Вымышленная цель"}, names=names,
+                             detail_level="program_day", day_position=1)
+        for value in ("Первая неделя", "Уменьшить объём при усталости"):
+            self.assertIn(value, overview)
+            self.assertIn(value, week)
+        self.assertIn("Подход 1", day)
+        self.assertIn("Подход 1", week)
+        self.assertNotIn("preview_id", week)
+
+    def test_program_numbers_preserve_significant_precision(self) -> None:
+        self.assertEqual(_number("100.000000"), "100")
+        self.assertEqual(_number("2.500000"), "2,5")
+        self.assertEqual(_number("2.500001"), "2,500001")
+        self.assertEqual(_number("0.000000"), "0")
+
+    def test_program_stage_rejects_overlap_and_invalid_day_reference(self) -> None:
+        source = _program(1, 0)["publication_source"]
+        source["version"]["cycle_stages"] = [{
+            "starts_on": "2030-01-01", "ends_on": "2030-01-07",
+            "title": "Вымышленная неделя", "description": "Вымышленный объём",
+            "day_rules": [{"day_position": 2, "description": "Вымышленное правило"}],
+        }]
+        source["program"] = source["program_snapshot"]
+        with self.assertRaisesRegex(DomainValidationError, "distinct templates"):
+            validate_program_draft(source)
+        source["version"]["cycle_stages"][0]["day_rules"][0]["day_position"] = 1
+        source["version"]["cycle_stages"].append({
+            "starts_on": "2030-01-07", "ends_on": "2030-01-14",
+            "title": "Другая неделя", "description": "Другое правило", "day_rules": [],
+        })
+        with self.assertRaisesRegex(DomainValidationError, "must not overlap"):
+            validate_program_draft(source)
+
     def test_program_three_days_omits_full_inventory(self) -> None:
         payload = _program()
         text = render_program(

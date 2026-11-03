@@ -55,6 +55,7 @@ ALLOWED_STATIC_ROUTES = {
     "/api/v1/queries/exercises/search",
     "/api/v1/queries/planning-context",
     "/api/v1/queries/programs/get",
+    "/api/v1/queries/program-draft-detail",
     "/api/v1/queries/plans/get",
     "/api/v1/queries/workouts/history",
     "/api/v1/queries/progress",

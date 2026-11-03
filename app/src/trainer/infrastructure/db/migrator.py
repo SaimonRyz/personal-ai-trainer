@@ -176,6 +176,11 @@ MIGRATIONS = (
         "f838ab035788566b27a3cbb41dd1ea63839adc02823ef4127f1462a9941f1a7c",
         "0029_profile_update.py",
     ),
+    MigrationSpec(
+        "0030_program_schedule",
+        "48cbcabac33f6c83be226ec0e5454662f3ba2054d025a5655a0fca0f6d62b1e2",
+        "0030_program_schedule.py",
+    ),
 )
 
 

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any, Protocol
+from datetime import date
+from typing import Any, Literal, Protocol
 from uuid import UUID
 
 from mcp.server.fastmcp import FastMCP
@@ -41,6 +42,30 @@ def register_read_tools(
         idempotentHint=True,
         openWorldHint=False,
     )
+
+    @mcp.tool(structured_output=True, annotations=read_annotations)
+    def get_program_draft_detail(
+        conversation_id: str,
+        message_id: str,
+        timezone: str,
+        revision_id: UUID,
+        section: Literal["day", "week", "basis"],
+        correlation_id: UUID,
+        causation_id: UUID,
+        day_position: int | None = None,
+        week_start: date | None = None,
+    ) -> dict[str, Any]:
+        """Read a day, week, or basis from one current program draft revision; never creates a preview."""
+        body = {
+            "context": context(conversation_id, message_id, timezone),
+            "revision_id": str(revision_id),
+            "section": section,
+        }
+        if day_position is not None:
+            body["day_position"] = day_position
+        if week_start is not None:
+            body["week_start"] = week_start.isoformat()
+        return api_call("/api/v1/queries/program-draft-detail", body, correlation_id, causation_id)
 
     @mcp.tool(structured_output=True, annotations=read_annotations)
     def get_workout_history(

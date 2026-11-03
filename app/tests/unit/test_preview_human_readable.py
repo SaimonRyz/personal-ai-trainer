@@ -708,7 +708,7 @@ def test_publication_preview_shows_program_decision_without_service_data() -> No
     rendered = render(payload, goal={"name": "Вымышленная цель", "target_value": 10, "unit_code": "repetition", "target_date": "2030-02-28"}, names={exercise_revision: "Вымышленное упражнение"})
     for visible in (
         "Вымышленный цикл", "Начало", "2030-01-01", "2030-02-28",
-        "Вымышленная цель", "Вымышленное упражнение", "Подход 1", "6 раз",
+        "Вымышленная цель", "Вымышленное упражнение", "Подход 1", "6 повторений",
         "Добавлять нагрузку постепенно", "После подтверждения программа",
     ):
         assert visible in rendered

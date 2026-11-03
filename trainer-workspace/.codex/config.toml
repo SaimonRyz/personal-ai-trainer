@@ -33,6 +33,7 @@ enabled_tools = [
     "get_exercise_exact",
     "get_operation_status",
     "get_plan",
+    "get_program_draft_detail",
     "get_planning_context",
     "get_profile_context",
     "get_progress",

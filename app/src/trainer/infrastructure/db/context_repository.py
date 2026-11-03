@@ -4629,6 +4629,46 @@ class ContextRepository:
         )
         return response
 
+    def get_program_draft_detail(self, *, payload: dict[str, Any]) -> dict[str, Any]:
+        """Read a section from one current draft revision without creating a preview."""
+        row = self.session.execute(
+            text("""
+                SELECT dr.typed_payload,dr.content_digest,d.state,d.expires_at,d.intent_type
+                FROM trainer.draft_revisions dr JOIN trainer.drafts d ON d.draft_id=dr.draft_id
+                WHERE dr.draft_revision_id=:revision AND d.latest_revision_id=dr.draft_revision_id
+            """),
+            {"revision": payload["revision_id"]},
+        ).mappings().one_or_none()
+        if row is None or row["intent_type"] not in {"program", "program_publication"}:
+            raise ContextRepositoryError("not_found", "program draft revision not found", 404)
+        if row["state"] != "open" or row["expires_at"] <= datetime.now(UTC):
+            raise ContextRepositoryError("already_superseded", "draft is not open", 409)
+        if row["intent_type"] == "program_publication":
+            publication = row["typed_payload"]
+            source = self.session.execute(
+                text("SELECT state,latest_revision_id FROM trainer.drafts WHERE draft_id=:draft"),
+                {"draft": publication["source_draft_id"]},
+            ).mappings().one_or_none()
+            if (source is None or source["state"] != "open"
+                    or str(source["latest_revision_id"]) != publication["source_revision_id"]):
+                raise ContextRepositoryError("stale_preview", "source program draft changed; prepare a new publication draft", 409)
+        section = payload["section"]
+        detail_level = {"day": "program_day", "week": "program_week", "basis": "program_basis"}[section]
+        try:
+            detail = self._render_program_publication_preview(
+                dict(row["typed_payload"]), draft_only=row["intent_type"] == "program",
+                detail_level=detail_level, day_position=payload.get("day_position"),
+                week_start=payload.get("week_start"),
+            )
+        except ValueError as error:
+            raise ContextRepositoryError("validation_error", str(error), 422) from error
+        return {
+            "revision_id": str(payload["revision_id"]),
+            "draft_content_digest": row["content_digest"],
+            "section": section,
+            "canonical_text": detail,
+        }
+
     def create_preview(
         self,
         *,
@@ -4658,6 +4698,14 @@ class ContextRepository:
         if row["state"] != "open" or row["expires_at"] <= datetime.now(UTC):
             raise ContextRepositoryError("already_superseded", "draft is not open", 409)
         canonical_payload = dict(row["typed_payload"])
+        if row["intent_type"] == "program_publication":
+            source = self.session.execute(
+                text("SELECT state,latest_revision_id FROM trainer.drafts WHERE draft_id=:draft"),
+                {"draft": canonical_payload["source_draft_id"]},
+            ).mappings().one_or_none()
+            if (source is None or source["state"] != "open"
+                    or str(source["latest_revision_id"]) != canonical_payload["source_revision_id"]):
+                raise ContextRepositoryError("stale_preview", "source program draft changed; prepare a new publication draft", 409)
         # Only the full, confirmation-bound view may authorize a shown/confirm
         # transition. Section details stay tied to this draft revision.
         detail_level = payload.get("detail_level", "full")
@@ -5702,7 +5750,7 @@ class ContextRepository:
             templates.append(
                 {
                     **self._fields(
-                        day, "day_template_id", "position", "purpose", "equipment_needs"
+                        day, "day_template_id", "position", "weekday_code", "purpose", "equipment_needs"
                     ),
                     "day_type_code": day["day_type"],
                     "blocks": blocks,
@@ -5791,6 +5839,7 @@ class ContextRepository:
                 "period_start",
                 "period_end",
                 "rationale",
+                "cycle_stages",
                 "publication_state",
                 "published_at",
                 "supersedes_version_id",
@@ -5982,7 +6031,7 @@ class ContextRepository:
         version = source["version"]
         self.session.execute(
             text(
-                "INSERT INTO trainer.program_versions(program_version_id,program_id,goal_id,goal_revision_id,version_no,version_label,period_start,period_end,rationale,publication_state,published_at,supersedes_version_id,confirmation_id,created_at) VALUES (:id,:program,:goal,:goal_revision,:no,:label,:start,:end,:rationale,'published',:now,:supersedes,:confirmation,:now)"
+                "INSERT INTO trainer.program_versions(program_version_id,program_id,goal_id,goal_revision_id,version_no,version_label,period_start,period_end,rationale,cycle_stages,publication_state,published_at,supersedes_version_id,confirmation_id,created_at) VALUES (:id,:program,:goal,:goal_revision,:no,:label,:start,:end,:rationale,CAST(:stages AS jsonb),'published',:now,:supersedes,:confirmation,:now)"
             ),
             {
                 "id": version_id,
@@ -5994,6 +6043,7 @@ class ContextRepository:
                 "start": version["period_start"],
                 "end": version["period_end"],
                 "rationale": version["rationale"],
+                "stages": json.dumps(version.get("cycle_stages", [])),
                 "now": now,
                 "supersedes": source["supersedes_version_id"],
                 "confirmation": confirmation,
@@ -6002,13 +6052,14 @@ class ContextRepository:
         for day in version["templates"]:
             self.session.execute(
                 text(
-                    "INSERT INTO trainer.day_templates(day_template_id,program_version_id,position,day_type,purpose,equipment_needs,created_at) VALUES (:id,:version,:position,:kind,:purpose,CAST(:needs AS jsonb),:now)"
+                    "INSERT INTO trainer.day_templates(day_template_id,program_version_id,position,day_type,weekday_code,purpose,equipment_needs,created_at) VALUES (:id,:version,:position,:kind,:weekday,:purpose,CAST(:needs AS jsonb),:now)"
                 ),
                 {
                     "id": day["day_template_id"],
                     "version": version_id,
                     "position": day["position"],
                     "kind": day["day_type_code"],
+                    "weekday": day.get("weekday_code"),
                     "purpose": day["purpose"],
                     "needs": json.dumps(day["equipment_needs"]),
                     "now": now,
@@ -9424,8 +9475,10 @@ class ContextRepository:
 
     def _render_program_publication_preview(
         self, payload: dict[str, Any], *, draft_only: bool = False,
+        detail_level: str = "full", day_position: int | None = None,
+        week_start: str | None = None,
     ) -> str:
-        from trainer.infrastructure.db.program_publication_preview import render
+        from trainer.infrastructure.db.program_publication_preview import ProgramScheduleConflict, render
 
         source = payload if draft_only else payload["publication_source"]
         goal = self.session.execute(
@@ -9450,7 +9503,16 @@ class ContextRepository:
                 raise ContextRepositoryError("stale_preview", "program exercise is unavailable", 409)
             names[revision] = name
         presentation = {"publication_source": source} if draft_only else payload
-        return render(presentation, goal=dict(goal), names=names, draft_only=draft_only)
+        try:
+            return render(
+                presentation, goal=dict(goal), names=names, draft_only=draft_only,
+                detail_level=detail_level, day_position=day_position, week_start=week_start,
+            )
+        except ProgramScheduleConflict as error:
+            raise ContextRepositoryError(
+                "validation_error", str(error), 422,
+                field_errors=[{"path": error.path, "code": "schedule_conflict", "message_safe": str(error)}],
+            ) from error
 
     def _render_plan_preview(self, payload: dict[str, Any]) -> str:
         from trainer.infrastructure.db.plan_preview import render_plan
